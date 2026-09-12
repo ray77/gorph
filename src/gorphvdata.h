@@ -1,5 +1,5 @@
-/* gorphvdata.h - Sprachsample (Nutzer-MP3 -> 8-bit unsigned 22050 Hz
- * mono, normalisiert). Automatisch erzeugt. */
+/* gorphvdata.h - speech sample (user MP3 -> 8-bit unsigned 22050 Hz
+ * mono, normalized). Automatically generated. */
 #ifndef GORPHVDATA_H
 #define GORPHVDATA_H
 

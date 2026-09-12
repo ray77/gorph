@@ -1,8 +1,8 @@
-/* rockimg.h - Stein (GORF_ROCK.png) fuer den Credits-Schluss: hart
- * gekeyt, per HISTOGRAMM-ANGLEICH auf die Logo-Buchstaben gefaerbt (Ton-
- * wertverteilung ALLER Buchstabenpixel inkl. Risse, Farbe je Helligkeits-
- * stufe aus creditslogo.h, Rang^0.85 = etwas heller), premultipliziert
- * auf 72px vorskaliert, RGBA. */
+/* rockimg.h - rock (GORF_ROCK.png) for the credits end: hard
+ * keyed, colored onto the logo letters by HISTOGRAM MATCHING (tonal
+ * distribution of ALL letter pixels incl. cracks, color per brightness
+ * step from creditslogo.h, rank^0.85 = a bit brighter), premultiplied
+ * prescaled to 72px, RGBA. */
 #ifndef ROCKIMG_H
 #define ROCKIMG_H
 #define RK_W 72

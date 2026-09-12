@@ -1,13 +1,13 @@
-/* vic.h - VIC-II-Anzeigemodell.
+/* vic.h - VIC-II display model.
  *
- * Gorph benutzt zwei Modi, die pro Mission umgeschaltet werden
- * (Registertabelle $826A im Original):
- *   - Multicolor-TEXT  (Astro Battles, Flag Ship): Matrix $4000 traegt
- *     Zeichencodes, Zeichensatz liegt bei $4800.
- *   - Multicolor-BITMAP (Laser Attack, Space Warp): Bitmap $6000,
- *     Matrix und Farb-RAM liefern nur die Farben.
- * Dazu die Sprites - GORPH laeuft nativ, das 8er-Hardware-Limit ist
- * aufgehoben (16 Software-Sprites, Prioritaet weiter: 0 = vorn).
+ * Gorph uses two modes that are switched per mission
+ * (register table $826A in original):
+ *   - Multicolor-TEXT  (Astro Battles, Flag Ship): matrix $4000 holds
+ *     character codes, charset lives at $4800.
+ *   - Multicolor-BITMAP (Laser Attack, Space Warp): bitmap $6000,
+ *     matrix and color RAM only give the colors.
+ * Plus sprites - GORPH runs natively, the 8-sprite hardware limit
+ * is lifted (16 software sprites, priority still: 0 = front).
  */
 #ifndef VIC_H_INCLUDED
 #define VIC_H_INCLUDED
@@ -28,12 +28,12 @@ typedef struct {
     unsigned char bitmap[VIC_BITMAP_SZ];  /* $6000 */
     unsigned char screen[VIC_SCREEN_SZ];  /* $4000 */
     unsigned char color [VIC_SCREEN_SZ];  /* $D800 */
-    unsigned char charset[1024];          /* $4800 - im RAM, wird animiert */
+    unsigned char charset[1024];          /* $4800 - in RAM, is animated */
     unsigned char spdata[NUM_SPRITES][64];
     short         spx[NUM_SPRITES];
     short         spy[NUM_SPRITES];
     unsigned char spcol[NUM_SPRITES];
-    unsigned short spenable;              /* $D015 (16 Sprites) */
+    unsigned short spenable;              /* $D015 (16 sprites) */
     unsigned short spmulti;               /* $D01C */
     unsigned short spxexp, spyexp;        /* $D01D / $D017 */
     unsigned char bg, border;             /* $D021 / $D020 */
@@ -48,14 +48,14 @@ extern const unsigned long vic_palette[16];
 void vic_reset(void);
 void vic_render(unsigned char *out);
 
-/* Bildversatz (Screenshake), von der Spiellogik gesetzt */
+/* Image offset (screenshake), set by the game logic */
 extern int vic_shake_x, vic_shake_y;
 
-/* Kollisionsabfragen nach VIC-Regeln (Multicolor-Bitpaar 01 ist
- * durchsichtig, 10/11 und Hires-Bits kollidieren): */
-int vic_sprites_overlap(int a, int b);   /* $D01E: Sprite gegen Sprite  */
-int vic_sprites_overlap_hw(int a, int b); /* dito, aber MC %01 transparent */
-int vic_sprite_bg(int i);                /* $D01F: Sprite gegen Anzeige */
+/* Collision checks per VIC rules (multicolor bit pair 01 is
+ * transparent, 10/11 and hires bits collide): */
+int vic_sprites_overlap(int a, int b);   /* $D01E: sprite vs. sprite    */
+int vic_sprites_overlap_hw(int a, int b); /* ditto, but MC %01 transparent */
+int vic_sprite_bg(int i);                /* $D01F: sprite vs. display   */
 int vic_sprite_hits_code(int i, int lo, int hi);
 
 #endif

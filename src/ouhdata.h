@@ -1,5 +1,5 @@
-/* ouhdata.h - "Ouh" des Daemons (ouh.mp3), wenn er beim Credits-Ende
- * ganz weggewischt ist: 8-Bit unsigned mono 22050 Hz. */
+/* ouhdata.h - demon's "Ouh" (ouh.mp3) when he is fully wiped away at
+ * the credits end: 8-bit unsigned mono 22050 Hz. */
 #ifndef OUHDATA_H
 #define OUHDATA_H
 #define OUH_LEN 20740L

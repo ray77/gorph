@@ -1,4 +1,4 @@
-/* Lensflare-Spritesheet (lens_effekt_red.png), 13 Frames, 17px hoch */
+/* Lensflare spritesheet (lens_effekt_red.png), 13 frames, 17px high */
 #define LF_N 13
 #define LF_H 17
 static const unsigned char lf_w[LF_N] = {3,5,9,11,15,15,15,15,15,15,15,15,15};

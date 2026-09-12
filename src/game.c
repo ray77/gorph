@@ -1,10 +1,10 @@
-/* game.c - Spiellogik, nach dem Disassembly der C64-Fassung.
+/* game.c - game logic, after the disassembly of the C64 version.
  *
- * Astro Battles und Flag Ship laufen im Multicolor-Textmodus: die
- * Matrix $4000 traegt Zeichencodes, Gegner sind 2x2-Zellenbloecke mit
- * fortlaufenden Codes ($8649), der Schild besteht aus den Zeichen
- * $19-$1D ($96C2/$96DA).  Laser Attack und Space Warp laufen in der
- * Multicolor-Bitmap mit dem Software-Blitter ($9967).
+ * Astro Battles and Flag Ship run in multicolor text mode: the
+ * matrix $4000 holds character codes, enemies are 2x2 cell blocks
+ * with consecutive codes ($8649), the shield consists of the
+ * characters $19-$1D ($96C2/$96DA).  Laser Attack and Space Warp
+ * run in the multicolor bitmap with the software blitter ($9967).
  */
 #include "gorph.h"
 #include "vic.h"
@@ -16,7 +16,7 @@
 
 Game g;
 
-/* --- Originaltabellen ------------------------------------------------ */
+/* --- Original tables ------------------------------------------------- */
 
 static const signed char form_col[8]  = { 1, 4, 7, 10, 13, 16, 19, 22 };  /* $853E */
 static const signed char rank_row[6]  = { 6, 8, 10, 12, 12, 14 };         /* $8546 */
@@ -31,7 +31,7 @@ static const char *rank_name[6] = {                 /* $9E1B */
     "CADET", "CAPTAIN", "COLONEL", "GENERAL", "WARRIOR", "AVENGER"
 };
 
-/* Registersaetze $826A: Rahmen/Hintergrund, Modus, Spritefarben */
+/* Register sets $826A: border/background, mode, sprite colors */
 static const unsigned char mis_border[4] = { 6, 0, 0, 0 };
 static const unsigned char mis_bg[4]     = { 6, 0, 0, 0 };
 static const unsigned char mis_bg1[4]    = { 1, 0, 0, 7 };  /* $D022 */
@@ -46,21 +46,21 @@ static const unsigned char mis_spcol[4][8] = {
     { 6, 1, 6, 6, 6, 6, 6, 7 }
 };
 
-/* Sprite-Bloecke (Zeiger - 64) */
+/* Sprite blocks (pointer - 64) */
 #define BLK_PLAYER    0     /* $40 $5000 */
-#define BLK_GORPH      1     /* $41 $5040 grosses Schiff   */
-#define BLK_SAUCER    2     /* $42 $5080 kleine Untertasse */
-#define BLK_FLY       3     /* $43 $50C0 Fliege            */
-#define BLK_FLAG_L    4     /* $44 Flaggschiff links       */
-#define BLK_FLAG_R    5     /* $45 Flaggschiff rechts      */
-#define BLK_FIGHTER   6     /* $46 kleiner Jaeger (M1)     */
-#define BLK_LEADER   20     /* $54 Fuehrungsschiff (M1)    */
-#define BLK_BOOM1    22     /* $56 Explosionsfolge         */
-#define BLK_BOMB_A   31     /* $5F Zickzack-Bombe          */
+#define BLK_GORPH      1     /* $41 $5040 large ship       */
+#define BLK_SAUCER    2     /* $42 $5080 small saucer     */
+#define BLK_FLY       3     /* $43 $50C0 fly              */
+#define BLK_FLAG_L    4     /* $44 flagship left          */
+#define BLK_FLAG_R    5     /* $45 flagship right         */
+#define BLK_FIGHTER   6     /* $46 small fighter (M1)     */
+#define BLK_LEADER   20     /* $54 lead ship (M1)         */
+#define BLK_BOOM1    22     /* $56 explosion sequence     */
+#define BLK_BOMB_A   31     /* $5F zigzag bomb            */
 #define BLK_BOMB_B   32     /* $60 */
-#define BLK_SHOT     33     /* $61 Spielerschuss           */
+#define BLK_SHOT     33     /* $61 player shot            */
 
-/* Zeichencodes */
+/* Char codes */
 #define CH_EMPTY   0x00
 #define CH_STAR    0x1E
 #define CH_LIFE    0x3E
@@ -73,7 +73,7 @@ static const unsigned char mis_spcol[4][8] = {
 #define SP_BOOM   4
 #define SP_GORPH   7
 
-/* --- Kleinkram ------------------------------------------------------- */
+/* --- Miscellany ------------------------------------------------------ */
 
 static unsigned long rngstate = 0x29A5721UL;
 static int rnd(int n)
@@ -98,11 +98,11 @@ static void sprite_off(int i)
     vic.spenable = (unsigned short)(vic.spenable & ~(1 << i));
 }
 
-static int  tsin_q(int q);              /* Titel-Orbit (Definition unten) */
+static int  tsin_q(int q);              /* Title orbit (defined below) */
 static void robot_scaled(int spr, int w_p, int hs);
 
-/* Alle sichtbaren MC-Paare eines Sprites auf %10 setzen -> ganze Form
- * nimmt die Spritefarbe an (fuer den GORPH-Buchstabenblitz) */
+/* Set all visible MC pairs of a sprite to %10 -> the whole shape
+ * takes on the sprite color (for the GORPH letter flash) */
 static void sprite_solidify(int i)
 {
     int b, p;
@@ -114,8 +114,8 @@ static void sprite_solidify(int i)
     }
 }
 
-/* Spritedaten ausduennen (Dither auf MC-Paar-Ebene): phase 0 = 50%
- * Schachbrett, phase 1 = 25% - fuer "verwischte" Motion-Blur-Geister */
+/* Thin out sprite data (dither at MC pair level): phase 0 = 50%
+ * checkerboard, phase 1 = 25% - for "smeared" motion blur ghosts */
 static void sprite_dither(int i, int phase)
 {
     int b;
@@ -130,7 +130,7 @@ static void sprite_dither(int i, int phase)
     }
 }
 
-/* $9B48 (force) / $9B4B (nur freie Zelle: 0 oder >= $19) */
+/* $9B48 (force) / $9B4B (only free cell: 0 or >= $19) */
 static void mat_put(int col, int row, int code, int color, int force)
 {
     int cell;
@@ -144,23 +144,23 @@ static void mat_put(int col, int row, int code, int color, int force)
     vic.screen[cell] = (unsigned char)code;
 }
 
-/* Text in die Matrix: Zeichensatzordnung $1F.. = A-I K-U/V W, $33.. = 0-9 */
+/* Text into the matrix: charset order $1F.. = A-I K-U/V W, $33.. = 0-9 */
 
-/* Schmaler MC-Font ($1F+, Original-Statuszeilen) */
+/* Narrow MC font ($1F+, original status lines) */
 static int char_code(char c)
 {
     static const char set[] = "ABCDEFGHIKLMNOPRSTUW";
     int i;
     if (c >= '0' && c <= '9') return 0x33 + (c - '0');
     if (c == ':') return 0x3D;
-    if (c == 'V') return 0x31;              /* teilt sich die Form mit U */
+    if (c == 'V') return 0x31;              /* shares the shape with U */
     for (i = 0; set[i]; ++i)
         if (set[i] == c) return CH_TEXT + i;
     return CH_EMPTY;
 }
 
-/* Voller Hires-Font (Glyphen $41-$5A A-Z, $70-$79 Ziffern, $7A ':') -
- * fuer Titel-/Intro-Texte; Statuszeilen nutzen den schmalen MC-Font. */
+/* Full hires font (glyphs $41-$5A A-Z, $70-$79 digits, $7A ':') -
+ * for title/intro texts; status lines use the narrow MC font. */
 static int char_hires(char c)
 {
     if (c >= 'A' && c <= 'Z') return 0x41 + (c - 'A');
@@ -181,7 +181,7 @@ static void mat_text(int col, int row, const char *s, int color)
         mat_put(col + i, row, char_hires(s[i]), color, 1);
 }
 
-/* Statuszeilen-Text im schmalen MC-Font (gelb, wie Original) */
+/* Status line text in narrow MC font (yellow, like original) */
 static void mat_text_mc(int col, int row, const char *s)
 {
     int i;
@@ -189,26 +189,26 @@ static void mat_text_mc(int col, int row, const char *s)
         mat_put(col + i, row, char_code(s[i]), 0x0F, 1);
 }
 
-/* Dieselben Zeichen als Bitmap-Zellen (Statuszeile im Bitmapmodus, $9DC7) */
+/* The same characters as bitmap cells (status line in bitmap mode, $9DC7) */
 static void bm_text(int col, int row, const char *s)
 {
     int i, y;
     for (i = 0; s[i]; ++i) {
         int cell = row * VIC_COLS + col + i;
-        int code = char_code(s[i]);       /* schmaler MC-Font (Original) */
+        int code = char_code(s[i]);       /* narrow MC font (original) */
         if (col + i >= VIC_COLS) break;
         for (y = 0; y < 8; ++y)
             vic.bitmap[cell * 8 + y] = vic.charset[code * 8 + y];
     }
 }
 
-/* --- Bitmap-Grundlagen ($9884/$9B7F, $98A8) -------------------------- */
+/* --- Bitmap basics ($9884/$9B7F, $98A8) ------------------------------ */
 
 static void bitmap_clear(void)
 {
     memset(vic.bitmap, 0, VIC_BITMAP_SZ);
-    memset(vic.screen, 0x76, VIC_SCREEN_SZ);   /* %01 gelb, %10 blau */
-    memset(vic.color,  0x02, VIC_SCREEN_SZ);   /* %11 rot            */
+    memset(vic.screen, 0x76, VIC_SCREEN_SZ);   /* %01 yel, %10 blue */
+    memset(vic.color,  0x02, VIC_SCREEN_SZ);   /* %11 red           */
 }
 
 static void plot(int xmc, int y, int color, int force)
@@ -223,7 +223,7 @@ static void plot(int xmc, int y, int color, int force)
                       (unsigned char)(~keep[xmc & 3] & pat[color & 3]));
 }
 
-/* --- Statuszeile ($9CBB Text / $9D21 Bitmap) ------------------------- */
+/* --- Status line ($9CBB text / $9D21 bitmap) ------------------------- */
 
 static void status_lines(void)
 {
@@ -232,15 +232,15 @@ static void status_lines(void)
     int i;
 
     if (vic.mode == VIC_MODE_TEXT) {
-        /* Statuszeilen: schmaler MC-Font gelb (wie Original + Bitmap-Level) */
+        /* Status lines: narrow MC font yellow (as original + bitmap levels) */
         mat_text_mc(1, 0, "SCORE:");
         sprintf(buf, "%06ld", g.score);
         mat_text_mc(7, 0, buf);
-        for (i = 0; i < 6; ++i)   /* volle Lebenszahl (Longplay: Start 5) */
+        for (i = 0; i < 6; ++i)   /* full life count (longplay: start 5) */
             mat_put(17 + i, 0,
                     (g.state != ST_TITLE && !g.demo && i < g.lives) ? CH_LIFE : CH_EMPTY,
                     0x0F, 1);
-        if (g.demo && ((g.frame >> 4) & 1))   /* DEMO blinkt statt Kreuze */
+        if (g.demo && ((g.frame >> 4) & 1))   /* DEMO blinks, not crosses */
             mat_text_mc(18, 0, "DEMO");
         mat_text_mc(27, 0, "HSCORE:");
         sprintf(buf, "%06ld", g.hiscore);
@@ -255,7 +255,7 @@ static void status_lines(void)
         bm_text(1, 0, "SCORE:");
         sprintf(buf, "%06ld", g.score);
         bm_text(7, 0, buf);
-        for (i = 0; i < 6; ++i) {         /* Lebenskreuze auch im Bitmap */
+        for (i = 0; i < 6; ++i) {         /* life crosses in bitmap too */
             int code = (!g.demo && i < g.lives) ? CH_LIFE : CH_EMPTY;
             int y;
             for (y = 0; y < 8; ++y)
@@ -274,12 +274,12 @@ static void status_lines(void)
     }
 }
 
-/* --- Sterne ($95CC Text / $9663 Bitmap) ------------------------------ */
+/* --- Stars ($95CC text / $9663 bitmap) ------------------------------- */
 
-/* (Matrix-Titelsterne stars_text ENTFERNT - der Titel nutzt jetzt das
- * rotierende Pixel-Starfield title_starfield als Post-Pass.) */
+/* (matrix title stars stars_text REMOVED - the title screen now uses
+ * the rotating pixel starfield title_starfield as a post pass.) */
 
-/* Weisser Stern im Bitmap: %01-Pixel + Zellen-Hi-Nibble auf Weiss */
+/* White star in bitmap: %01 pixel + cell hi-nibble set to white */
 static void plot_star(int xmc, int y)
 {
     int cell = (y >> 3) * VIC_COLS + (xmc >> 2);
@@ -297,7 +297,7 @@ static void stars_bitmap_all(void)
     }
 }
 
-/* Funkeln ($9663): pro Frame ist genau ein Stern dunkel, Index wandert */
+/* Sparkle ($9663): exactly one star is dark per frame, index moves */
 static void star_twinkle(void)
 {
     static int tw = 0;
@@ -309,9 +309,9 @@ static void star_twinkle(void)
         plot(gd_star_col[tw] * 4, gd_star_row[tw] * 8, 0, 1);
 }
 
-/* (text_stars_fall entfernt - Outro nutzt Pixel-Starfield) */
+/* (text_stars_fall removed - outro uses pixel starfield) */
 
-/* Sterne im Textmodus (Flag Ship): weiss, wanderndes Funkeln */
+/* Stars in text mode (Flag Ship): white, moving sparkle */
 static void text_stars(void)
 {
     static int tw = 0;
@@ -325,10 +325,10 @@ static void text_stars(void)
     }
 }
 
-/* --- Schild ($96C2 Kuppel / $96DA Schuessel) ------------------------- */
+/* --- Shield ($96C2 dome / $96DA dish) -------------------------------- */
 
-/* Ein Tabelleneintrag: Bit 7 = vorher Zeile += step; Code = Wert & $7F.
- * X = 17..0; linke Spalte 19-X (Hi-Nibble), rechte 20+X (Lo-Nibble). */
+/* One table entry: bit 7 = row += step first; code = value & $7F.
+ * X = 17..0; left column 19-X (hi nibble), right 20+X (lo nibble). */
 static void shield_draw(int bowl)
 {
     const unsigned char *tab = bowl ? gd_shield_bowl : gd_shield_dome;
@@ -348,7 +348,7 @@ static void shield_draw(int bowl)
             int dead = side ? !(g.shield[x] & 0x0F) : !(g.shield[x] & 0xF0);
             if (e & 0x80) row += step;
             mat_put(col, row, (dead || blank) ? CH_EMPTY : code, color, 0);
-            /* Anschlusszelle fuer die 4-Zeilen-Bloecke ueber Zellgrenzen */
+            /* Continuation cell for the 4-row blocks across cell borders */
             if (!dead && !blank) {
                 if (code + 1 == 0x1D)
                     mat_put(col, row - step, 0x1D, color, 0);
@@ -359,27 +359,27 @@ static void shield_draw(int bowl)
     }
 }
 
-/* $97A6: Treffer bei Spalte y - loescht das ganze Nibble */
+/* $97A6: hit at column y - clears the whole nibble */
 static void shield_hit_col(int col)
 {
     if (col >= 2 && col <= 19)  g.shield[19 - col] &= 0x0F;
     else if (col >= 20 && col <= 37) g.shield[col - 20] &= 0xF0;
 }
 
-/* Flimmern ($9784): jede zweite Bildperiode Codes $19-$1D XOR-Toggeln */
+/* Flicker ($9784): every second frame period XOR-toggle codes $19-$1D */
 static void shield_flicker(void)
 {
     static const unsigned char pat[4] = { 0xCC, 0xC3, 0x66, 0x66 };
     int i, k = 0;
     if (g.frame & 1) return;
     for (i = 0x19 * 8; i < 0x19 * 8 + 34; ++i) {
-        if (vic.charset[i] == 0) continue;   /* Nullbytes zaehlen nicht mit */
+        if (vic.charset[i] == 0) continue;   /* zero bytes do not count */
         vic.charset[i] ^= pat[k & 3];
         ++k;
     }
 }
 
-/* --- Explosionssprite 4 ($8685/$A027) -------------------------------- */
+/* --- Explosion sprite 4 ($8685/$A027) -------------------------------- */
 
 static void boom_at(int sx, int sy)
 {
@@ -395,7 +395,7 @@ static void boom_draw(void)
     int idx;
     if (g.boomtimer <= 0) return;
     idx = 3 - g.boomtimer / 4;
-    if (idx < 0) idx = 0;      /* frischer Boom (16) noch vor dem Dekrement */
+    if (idx < 0) idx = 0;      /* fresh boom (16) even before the decrement */
     set_sprite(SP_BOOM, seq[idx], g.boomx, g.boomy, 7, 1);
 }
 
@@ -408,22 +408,22 @@ static void boom_update(void)
 
 static void laser_draw_player(int erase);
 
-/* Spieler-Explosion: Schiff verschwindet (Blitter loeschen bzw. Sprite aus),
- * Boom-Sequenz ersetzt es (boom_update laeuft in ST_PLAYER_HIT). */
+/* Player explosion: ship disappears (blitter erase or sprite off),
+ * boom sequence replaces it (boom_update runs in ST_PLAYER_HIT). */
 static void player_explode(void)
 {
     if (g.mission == 1) {
-        laser_draw_player(1);            /* Schiff aus dem Bitmap loeschen */
+        laser_draw_player(1);            /* erase ship from the bitmap */
         boom_at(g.bx * 2 + 24, g.by + 50);
     } else {
-        sprite_off(SP_PLAYER);           /* Schiff weg, Explosion an der Stelle */
+        sprite_off(SP_PLAYER);           /* ship gone, explosion in its place */
         boom_at(g.px, g.py);
     }
 }
 
 static void add_score(int idx)
 {
-    if (g.demo) return;                   /* Attract-Mode: keine Wertung ($AC) */
+    if (g.demo) return;                   /* attract mode: no scoring ($AC) */
     g.score += points_tab[idx];
     if (g.score > 999999L) g.score -= 1000000L;
     if (g.score > g.hiscore) g.hiscore = g.score;
@@ -476,10 +476,10 @@ static void astro_init(void)
     g.bomb_on[0] = g.bomb_on[1] = 0;
 }
 
-/* Einflug: Sprite 7 pendelt, an den Triggerpositionen $88BD erscheint
- * der naechste Gegner in der Reihenfolge $88A5 */
-/* Y-Sprungbogen des Gorph-Schiffs waehrend der Materialisierung ($8895):
- * das Schiff huepft auf und ab, waehrend es horizontal fegt. */
+/* Fly-in: sprite 7 oscillates, at the trigger positions $88BD the
+ * next enemy appears in the order $88A5 */
+/* Y jump arc of the Gorph ship during materialization ($8895):
+ * the ship hops up and down while sweeping horizontally. */
 static const unsigned char gorph_yarc[16] = {
     0x32,0x32,0x33,0x33,0x34,0x35,0x35,0x36,
     0x37,0x38,0x3A,0x3B,0x3D,0x3F,0x42,0x45
@@ -489,25 +489,25 @@ static void astro_materialize(void)
 {
     static int phase;
     int i, idx, prevx = g.gorphx;
-    if (g.gorphtimer > 0) {                /* abgeschossen: kurz verschwunden */
+    if (g.gorphtimer > 0) {                /* shot down: briefly gone */
         --g.gorphtimer;
         sprite_off(SP_GORPH);
         return;
     }
     g.gorphx += g.gorphdir;
-    /* Roboter bleibt im Alien-/Trigger-Bereich (Trigger 33..201), wendet knapp
-     * hinter dem letzten Trigger - nicht bis zum Bildrand (gemessen emuref). */
+    /* Robot stays in the alien/trigger area (trigger 33..201), turns just
+     * past the last trigger - not to the screen edge (measured emuref). */
     if (g.gorphx < 24)  { g.gorphx = 24;  g.gorphdir = 2; }
     if (g.gorphx > 206) { g.gorphx = 206; g.gorphdir = -2; }
     ++phase;
-    idx = phase & 31;                 /* Dreieck 0..15..0 (Ping-Pong) */
+    idx = phase & 31;                 /* Triangle 0..15..0 (pingpong) */
     if (idx > 15) idx = 31 - idx;
     set_sprite(SP_GORPH, BLK_GORPH, g.gorphx, gorph_yarc[idx], 10, 1);
-    vic.spyexp = (unsigned short)(vic.spyexp | (1 << SP_GORPH));   /* doppelt hoch */
+    vic.spyexp = (unsigned short)(vic.spyexp | (1 << SP_GORPH));   /* 2x height */
 
-    /* Genau bei jedem Spalten-Ueberqueren ($88BD) EIN Alien absetzen
-     * ($34 sinkt nur bei echter Kreuzung -> Alien landet zwangslaeufig
-     * unter dem Roboter, $857C-$8599). Reihenfolge $88A5 = unten->oben. */
+    /* Drop exactly ONE alien at every column crossing ($88BD)
+     * ($34 decrements only on a real crossing -> the alien inevitably
+     * lands under the robot, $857C-$8599). Order $88A5 = bottom->top. */
     for (i = 0; i < 8; ++i) {
         int t = (int)gd_mattrig[i];
         if (g.matcount > 0 &&
@@ -526,7 +526,7 @@ static void astro_materialize(void)
     }
 }
 
-/* Marsch ($85B7): alle Objekte in einem Zug, gesperrt durch $02 */
+/* March ($85B7): all objects in one go, blocked by $02 */
 static void astro_march(void)
 {
     int i, hitedge = 0;
@@ -543,7 +543,7 @@ static void astro_march(void)
         g.ex[i] = (signed char)(g.ex[i] + g.xdir);
         if (g.ex[i] == 1 || g.ex[i] == 0x25) hitedge = 1;
         draw_enemy(i);
-        /* nachlaufende Spalte loeschen */
+        /* clear trailing column */
         if (g.xdir > 0) {
             mat_put(oldc, g.ey[i],     CH_EMPTY, 1, 1);
             mat_put(oldc, g.ey[i] + 1, CH_EMPTY, 1, 1);
@@ -557,8 +557,8 @@ static void astro_march(void)
     if (hitedge) {
         int top;
         g.xdir = -g.xdir;
-        /* $8614: von unten nach oben - jede Reihe ueberschreibt die
-         * alten Zellen der Reihe darueber */
+        /* $8614: from bottom to top - each row overwrites the
+         * old cells of the row above */
         for (i = NUM_ENEMIES - 1; i >= 0; --i) {
             g.ey[i] = (signed char)(g.ey[i] + 2);
             if (g.etype[i] == 0xFF) continue;
@@ -575,7 +575,7 @@ static void astro_march(void)
                     g.eleft + 1, bad);
         }
 #endif
-        /* $8624: die freigewordenen obersten zwei Zeilen loeschen */
+        /* $8624: clear the two topmost rows that became free */
         top = 25;
         for (i = 0; i < NUM_ENEMIES; ++i)
             if (g.etype[i] != 0xFF && g.ey[i] < top) top = g.ey[i];
@@ -588,7 +588,7 @@ static void astro_march(void)
         }
     }
 
-    /* $8661: Boden erreicht -> Leben weg, Welle vorbei */
+    /* $8661: ground reached -> life lost, wave over */
     for (i = 0; i < NUM_ENEMIES; ++i)
         if (g.etype[i] != 0xFF && g.ey[i] >= 22) {
             g.pdead = 1;
@@ -600,10 +600,10 @@ static void astro_march(void)
         }
 }
 
-/* $8685: Gegner i faellt */
-/* Ist Alien i waehrend der Materialisierung schon GESETZT? (nur die
- * duerfen sterben - sonst stirbt ein unsichtbares derselben Spalte und
- * der Roboter "setzt" spaeter eine Leiche) */
+/* $8685: enemy i falls */
+/* Is alien i already SET during materialization? (only those
+ * may die - otherwise an invisible one of the same column dies and
+ * the robot later "sets" a corpse) */
 static int mat_placed(int i)
 {
     int k;
@@ -622,10 +622,10 @@ static void astro_kill(int i)
     g.etype[i] = 0xFF;
     erase_enemy_cells(g.ex[i], g.ey[i]);
     boom_at((g.ex[i] + 1) * 8 + 0x12, (g.ey[i] + 1) * 8 + 0x2A);
-    add_score(1);              /* 50 Punkte */
+    add_score(1);              /* 50 points */
 }
 
-/* Bomben ($8709): hoechstens zwei, Schuetze zufaellig, untere Reihe zuerst */
+/* Bombs ($8709): at most two, shooter random, bottom row first */
 static void astro_bombs(void)
 {
     int s;
@@ -637,7 +637,7 @@ static void astro_bombs(void)
         if (rnd(64) > 2 + g.rank) continue;
         k = -1;
         for (tries = 0; tries < 3 && k < 0; ++tries) {
-            int base = (2 - tries) * 8;      /* untere, mittlere, obere */
+            int base = (2 - tries) * 8;      /* bottom, middle, top */
             int c = rnd(8);
             if (g.etype[base + c] != 0xFF) k = base + c;
         }
@@ -657,7 +657,7 @@ fall:
     }
 }
 
-/* Gorph-Schiff ($87B6): pendelt gelegentlich oben durch */
+/* Gorph ship ($87B6): occasionally swings past on top */
 static void astro_gorphship(void)
 {
     static const int gorphblk[3] = { BLK_GORPH, BLK_FLY, BLK_SAUCER };
@@ -671,16 +671,16 @@ static void astro_gorphship(void)
     g.gorphx += g.gorphdir;
     if (g.gorphx < 20 || g.gorphx > 340) { g.gorphtimer = 200 + rnd(400); return; }
     set_sprite(SP_GORPH, gorphblk[g.gorphtype], g.gorphx, 0x45, 10, 1);   /* $87DE: Y=$45 */
-    if (g.gorphtype == 0)                  /* $8816: nur Typ 1 doppelt hoch */
+    if (g.gorphtype == 0)                  /* $8816: only type 1 2x height */
         vic.spyexp = (unsigned short)(vic.spyexp | (1 << SP_GORPH));
     else
         vic.spyexp = (unsigned short)(vic.spyexp & ~(1 << SP_GORPH));
 }
 
-/* Kollisionsphase Mission 0 ($9280): pixelgenau ueber den Anzeige-
- * zustand des letzten Bildes, Zellauswahl aus der Sprite-Ecke ($956B) */
-/* Punkte-Popup (Arcade-Optik): Punktzahl erscheint kurz in kleiner
- * MC-Schrift an der Abschussstelle und fadet schnell aus. */
+/* Collision phase mission 0 ($9280): pixel-exact against the display
+ * state of the last frame, cell pick from the sprite corner ($956B) */
+/* Points popup (arcade look): the score appears briefly in small
+ * MC font at the kill spot and fades out quickly. */
 static void pop_spawn(int sx, int sy, const char *s)
 {
     int i = (g.pop_t[0] <= g.pop_t[1]) ? 0 : 1;
@@ -699,8 +699,8 @@ static void score_pops(void)
         if (g.pop_t[i] <= 0) continue;
         --g.pop_t[i];
         for (c = 0; g.pop_s[i][c]; ++c) {
-            /* Ausfaden: letzte 12 Frames blinken (Farbstufen greifen bei
-             * den schmalen MC-Ziffern nicht - Pixel sind bg1/bg2-Paare) */
+            /* Fade out: last 12 frames blink (color steps do not work on
+             * the narrow MC digits - pixels are bg1/bg2 pairs) */
             if (g.pop_t[i] == 0 ||
                 (g.pop_t[i] <= 12 && (g.pop_t[i] & 2) == 0))
                 mat_put(g.pop_x[i] + c, g.pop_y[i], CH_EMPTY, 1, 1);
@@ -715,7 +715,7 @@ static void astro_collide(void)
 {
     int col, i;
 
-    /* Spieler beruehrt einen Gegner ($10 Bit 0 -> $933F) */
+    /* Player touches an enemy ($10 bit 0 -> $933F) */
     if (!g.pdead && g.matdone &&
         vic_sprite_hits_code(SP_PLAYER, 0x01, 0x18)) {
         g.pdead = 1;
@@ -726,11 +726,11 @@ static void astro_collide(void)
         return;
     }
 
-    /* Bomben gegen Schild und Spieler */
+    /* Bombs against shield and player */
     for (i = 0; i < 2; ++i) {
         if (!g.bomb_on[i]) continue;
         if (vic_sprite_hits_code(SP_BOMB0 + i, 0x19, 0x1D)) {
-            shield_hit_col((g.bombx[i] - 24) >> 3);   /* Spalte aus der Ecke */
+            shield_hit_col((g.bombx[i] - 24) >> 3);   /* column from corner */
             g.bomb_on[i] = 0;
             sprite_off(SP_BOMB0 + i);
             sound_play(SND_HIT);
@@ -749,29 +749,29 @@ static void astro_collide(void)
 
     if (g.shot != 2) return;
 
-    /* Waehrend der Materialisierung sind sowohl der Roboter als auch die schon
-     * gesetzten Aliens abschiessbar (wie Original). Roboter-Treffer per Box;
-     * bei Fehltreffer faellt es zur Formationspruefung durch (Bomben/frei
-     * fliegendes Schiff sind hier inaktiv). */
+    /* During materialization both the robot and the aliens already set
+     * can be shot (as in the original). Robot hits via box; on a miss it
+     * falls through to the formation check (bombs/free-flying ship are
+     * inactive here). */
     if (!g.matdone) {
         int dx = g.shotx - g.gorphx;
         int dy = g.shoty - vic.spy[SP_GORPH];
         if (dx < 0) dx = -dx;
         if (dy < 0) dy = -dy;
-        if (g.gorphtimer == 0 && dx < 0x14 && dy < 0x18) {   /* Roboter treffbar */
+        if (g.gorphtimer == 0 && dx < 0x14 && dy < 0x18) {   /* robot hittable */
             boom_at(g.gorphx, vic.spy[SP_GORPH]);
-            add_score(5);                        /* 250 ($9326: Mat = -1 Stufe) */
+            add_score(5);                        /* 250 ($9326: Mat = -1 level) */
             pop_spawn(g.gorphx, vic.spy[SP_GORPH], "250");
-            g.gorphtimer = 100;                   /* Roboter kurz weg, dann weiter */
+            g.gorphtimer = 100;                   /* robot briefly gone, then back */
             g.shot = -1;
             sprite_off(SP_SHOT);
             sprite_off(SP_GORPH);
             return;
         }
-        /* kein Roboter -> weiter zur Formationspruefung unten */
+        /* no robot -> on to the formation check below */
     }
 
-    /* Schuss gegen Bomben und Gorph-Schiff (D01E-Paarung) */
+    /* shot against bombs and Gorph ship (D01E pairing) */
     for (i = 0; i < 2; ++i)
         if (g.bomb_on[i] && vic_sprites_overlap(SP_SHOT, SP_BOMB0 + i)) {
             g.bomb_on[i] = 0;
@@ -782,7 +782,7 @@ static void astro_collide(void)
             return;
         }
     if (g.gorphtimer < 0 && vic_sprites_overlap(SP_SHOT, SP_GORPH)) {
-        /* $935F: Roboter 300, Fliege 100, Untertasse 200 */
+        /* $935F: robot 300, fly 100, saucer 200 */
         static const int gorph_sc[3] = { 6, 2, 4 };
         static const char *gorph_ps[3] = { "300", "100", "200" };
         boom_at(g.gorphx, 0x45);
@@ -795,8 +795,8 @@ static void astro_collide(void)
         return;
     }
 
-    /* Schuss gegen die Formation: pixelgenaues Gate, danach wie $92A6
-     * nur der Spaltenvergleich - der unterste Lebende faellt */
+    /* Shot against the formation: pixel-exact gate, then as in $92A6
+     * only the column compare - the lowest living one falls */
     if (!vic_sprite_hits_code(SP_SHOT, 0x01, 0x18)) return;
     col = (g.shotx - 24) >> 3;
     for (i = NUM_ENEMIES - 1; i >= 0; --i) {
@@ -813,7 +813,7 @@ static void astro_collide(void)
 
 static void astro_update(void)
 {
-    score_pops();                         /* Punkte-Popups (auch waehrend Mat) */
+    score_pops();                         /* Score popups (also during Mat) */
     if (!g.matdone) { astro_materialize(); return; }
     shield_flicker();
     shield_draw(0);
@@ -825,22 +825,22 @@ static void astro_update(void)
 }
 
 /* ===================================================================== */
-/*  Laser Attack (Mission 1) - Bitmapmodus                               */
+/*  Laser Attack (Mission 1) - Bitmap mode                               */
 /* ===================================================================== */
 
-/* $891E: Spawn-Intervall je Rang */
+/* $891E: spawn interval per rank */
 static const int laser_step[8] = { 96, 72, 48, 24, 24, 8, 8, 32 };
-/* $8C54/$8C5C: Formationsplaetze relativ zur Kanone (Slot 3 = Roboter oben) */
+/* $8C54/$8C5C: formation slots relative to the cannon (slot 3 = robot top) */
 static const int lm_offx[4] = { 0, 24, 48, 24 };
 static const int lm_offy[4] = { 32, 32, 32, 12 };
-/* $8C64/$8C6C: Wiedereintritts-Drift und Sinkrate */
+/* $8C64/$8C6C: re-entry drift and sink rate */
 static const signed char lm_drift[8] = { 0, 2, 2, -2, -2, 2, 0, -2 };
 static const signed char lm_sink[8]  = { 2, 2, 4, 2, 4, 2, 4, 4 };
-/* $8C74: Respawn-X oben (Sprite-Koordinate - 24) */
+/* $8C74: respawn X top (sprite coordinate - 24) */
 static const int lm_respx[4] = { 0x18, 0x62, 0xAC, 0xFF };
 
-#define LASER_SPEED 2        /* 2 px/Frame ($89CF: 4 px je 2 Frames) */
-#define LASER_BOT 190        /* unterste Strahlzeile (Zeile $2F) */
+#define LASER_SPEED 2        /* 2 px/frame ($89CF: 4 px in 2 frames) */
+#define LASER_BOT 190        /* lowest beam line (line $2F) */
 
 static void laser_draw_player(int erase)
 {
@@ -848,7 +848,7 @@ static void laser_draw_player(int erase)
     shape_blit(0x06, g.bx + 8, g.by, 24, 3, erase);
 }
 
-/* Kanone (beweglicher Bitmap-Blob) zeichnen/loeschen */
+/* draw/clear cannon (movable bitmap blob) */
 static void laser_turret_blit(int s, int erase)
 {
     shape_blit(0x0F, g.tur_x[s],     g.tur_y[s] + 16, 16, 2, erase);
@@ -863,11 +863,11 @@ static void laser_draw_static(void)
     laser_draw_player(0);
 }
 
-/* Formationsplatz von Member m (Sprite-Koordinaten) */
+/* formation slot of member m (sprite coordinates) */
 static int lm_slot_x(int m) { return g.tur_x[m / 4] * 2 + 24 + lm_offx[m & 3]; }
 static int lm_slot_y(int m) { return g.tur_y[m / 4] + lm_offy[m & 3]; }
 
-/* $9BF2: quantisierte 8-Richtung auf den Spieler - einmalig, KEIN Homing */
+/* $9BF2: quantized 8-direction at the player - one-shot, NO homing */
 static void laser_aim(int m)
 {
     int dx = (g.bx * 2 + 24 + 12) - g.lm_x[m];
@@ -884,15 +884,15 @@ static void laser_aim(int m)
     }
 }
 
-/* Member m loest sich und stuerzt ($8B5D/$8B71) */
+/* member m detaches and dives ($8B5D/$8B71) */
 static void laser_attack(int m)
 {
     g.lm_state[m] = 1;
     laser_aim(m);
-    sound_play(SND_SIREN);    /* $F5=$11: Sirenen-Warble beim Abloesen */
+    sound_play(SND_SIREN);    /* $F5=$11: siren warble on detach */
 }
 
-/* $8B37: Respawn oben als Angreifer (kehrt nie mehr zurueck) */
+/* $8B37: respawn at top as attacker (never returns again) */
 static void laser_redive(int m)
 {
     g.lm_x[m] = 24 + lm_respx[rnd(4)];
@@ -900,7 +900,7 @@ static void laser_redive(int m)
     laser_attack(m);
 }
 
-/* $8AB1: oben einfaedeln - die Diagonale landet exakt auf dem Platz */
+/* $8AB1: thread in at top - the diagonal lands exactly on the slot */
 static void laser_reenter(int m)
 {
     int r, dist, off;
@@ -917,30 +917,30 @@ static void laser_reenter(int m)
     g.lm_state[m] = 2;
 }
 
-/* $8B5D: Spawn-Takt - zufaelliger sitzender Member loest sich */
+/* $8B5D: spawn tick - a random seated member detaches */
 static void laser_spawn(void)
 {
     int m;
-    if (g.pdead) return;                  /* $892B: nicht waehrend Explosion */
+    if (g.pdead) return;                  /* $892B: not during explosion */
     if (--g.lspawn > 0) return;
     g.lspawn = laser_step[g.rank];
     m = rnd(8);
     if (g.lm_state[m] == 0) laser_attack(m);
 }
 
-/* Kanone s feuert ihren eigenen Strahl nach unten */
+/* cannon s fires its own beam downward */
 static void laser_fire_from(int s)
 {
     if (g.laser_on[s]) return;
     g.laser_on[s] = 1;
-    g.laserx[s] = g.tur_x[s] + 5;         /* $899C: Spalte = X+5 */
+    g.laserx[s] = g.tur_x[s] + 5;         /* $899C: column = X+5 */
     g.lasery[s] = g.tur_y[s] + 33;
     g.lasertimer[s] = (LASER_BOT - g.lasery[s]) / LASER_SPEED + 1;
     sound_play(SND_BEAM);
 }
 
-/* $8A43: neuen Kurs wuerfeln - X Richtung Spieler (Rang 0: fest $45),
- * Y Richtung $42; (0,0) verboten */
+/* $8A43: roll a new course - X toward the player (rank 0: fixed $45),
+ * Y toward $42; (0,0) forbidden */
 static void laser_cannon_aim(int k)
 {
     int tx = (g.rank == 0) ? 0x45 : g.bx;
@@ -965,7 +965,7 @@ static void laser_init(void)
         g.tur_x[s] = 32 + s * 76;        /* $50=$20 / $51=$6C */
         g.tur_y[s] = 64;                 /* $52/$53=$40 */
         g.laser_on[s] = 0;
-        /* $8905 -> $899C: beide Kanonen starten STEHEND im Strahl-Modus */
+        /* $8905 -> $899C: both cannons start STANDING in beam mode */
         g.tur_state[s] = 0;
         g.tur_vx[s] = g.tur_vy[s] = 0;
         g.tur_timer[s] = 0;
@@ -978,21 +978,21 @@ static void laser_init(void)
         g.lm_y[m] = lm_slot_y(m);
         g.lm_dx[m] = g.lm_dy[m] = 0;
     }
-    g.eleft = 9;                          /* 8 Member + 2 Kanonen */
+    g.eleft = 9;                          /* 8 members, 2 cannons */
     g.lspawn = laser_step[g.rank];
     laser_draw_static();
 }
 
-/* $8961: Kanone wandert; Zustand-0-Member reiten mit ($8A84). Anhalten
- * (Timer/Grenze) -> Strahl ($899C). Jede Kanone nur in ihrem Frame. */
+/* $8961: cannon moves; state-0 members ride along ($8A84). Stopping
+ * (timer/limit) -> beam ($899C). Each cannon only in its own frame. */
 static void laser_cannons(void)
 {
     int k = g.frame & 1;
     int m, nx, ny, stop;
     if (!g.turret[k]) return;
     if (!g.tur_state[k]) {
-        /* $89DF-$89E3: Strahl fertig -> sofort neuer Kurs. Faengt auch den
-         * Fall ab, dass der Strahl extern geloescht wurde (Respawn). */
+        /* $89DF-$89E3: beam done -> new course at once. Also catches the
+         * case where the beam was cleared externally (respawn). */
         if (!g.laser_on[k]) laser_cannon_aim(k);
         return;
     }
@@ -1018,8 +1018,8 @@ static void laser_cannons(void)
     }
 }
 
-/* Member-Explosionssequenzen - laeuft auch waehrend PLAYER_HIT und
- * MISSION_CLEAR weiter (sonst friert die letzte Explosion ein). */
+/* Member explosion sequences - keeps running during PLAYER_HIT and
+ * MISSION_CLEAR too (otherwise the last explosion freezes). */
 static void laser_booms(void)
 {
     static const int seq[4] = { 22, 23, 25, 26 };
@@ -1032,18 +1032,18 @@ static void laser_booms(void)
     }
 }
 
-/* Alle 8 Member: Formation / Sturzflug / Rueckkehr; Rammen toetet Spieler.
- * Rang < 3: Memberbewegung nur jeden 2. Frame ($8932). */
+/* All 8 members: formation / dive / return; ramming kills the player.
+ * Rank < 3: member movement only every 2nd frame ($8932). */
 static void laser_members(void)
 {
     int m, k, tick = (g.rank >= 3) || !(g.frame & 1);
     for (m = 0; m < 8; ++m) {
         int mx, my, ddx, ddy;
         k = m / 4;
-        if (g.lm_boom[m] > 0) continue;   /* Explosion laeuft in laser_booms */
+        if (g.lm_boom[m] > 0) continue;   /* explosion runs in laser_booms */
         if (g.lm_state[m] == 0xFF) { sprite_off(m); continue; }
         if (tick) {
-            if (g.lm_state[m] == 1) {          /* Sturzflug, gerade */
+            if (g.lm_state[m] == 1) {          /* dive, straight */
                 g.lm_x[m] += g.lm_dx[m];
                 g.lm_y[m] += g.lm_dy[m];
                 if (g.lm_x[m] < 20 || g.lm_x[m] > 343 ||
@@ -1051,30 +1051,30 @@ static void laser_members(void)
                     if (g.rank < 5) laser_reenter(m);   /* $8BC9 */
                     else            laser_redive(m);
                 }
-            } else if (g.lm_state[m] == 2) {   /* Sinkflug zur Formation */
-                /* $8BD6: X 2x Kanonen-vx nur bei Rang<3 (Halbrate-Ausgleich),
-                 * Y bei Rang>=3 halbiert. Kanonenschritt zaehlt nur, solange
-                 * die Kanone tatsaechlich faehrt (sonst stale Drift). */
+            } else if (g.lm_state[m] == 2) {   /* descent to formation */
+                /* $8BD6: X 2x cannon-vx only at rank<3 (half-rate offset),
+                 * Y halved at rank>=3. Cannon step counts only while
+                 * the cannon is actually moving (else stale drift). */
                 int mv = g.turret[k] && g.tur_state[k] == 1;
                 int xs = !mv ? 0 : (g.rank < 3) ? g.tur_vx[k] * 2 : g.tur_vx[k];
                 int ys = !mv ? 0 : (g.rank < 3) ? g.tur_vy[k]     : g.tur_vy[k] / 2;
                 g.lm_x[m] += xs + g.lm_dx[m];
                 g.lm_y[m] += ys + g.lm_dy[m];
-                if (g.lm_y[m] >= lm_slot_y(m)) {    /* einrasten ($8C15) */
+                if (g.lm_y[m] >= lm_slot_y(m)) {    /* lock in ($8C15) */
                     g.lm_x[m] = lm_slot_x(m);
                     g.lm_y[m] = lm_slot_y(m);
                     g.lm_state[m] = 0;
                 } else if (g.lm_x[m] < 20 || g.lm_x[m] > 343 ||
                            g.lm_y[m] < 29) {
-                    /* rausgedriftet (Kanone zog den Member weg) -> oben
-                     * neu einfaedeln statt fuer immer verschwinden */
+                    /* drifted out (cannon pulled member away) -> thread
+                     * back at the top instead of vanishing forever */
                     laser_reenter(m);
                 }
             }
         }
         set_sprite(m, ((m & 3) == 3) ? BLK_LEADER : BLK_FIGHTER,
                    g.lm_x[m], g.lm_y[m], mis_spcol[1][m], 1);
-        /* $93D7: Angreifer rammt Spieler -> beide sterben */
+        /* $93D7: attacker rams player -> both die */
         if (!g.pdead && g.lm_state[m] == 1) {
             mx = (g.lm_x[m] - 24) / 2 + 6;
             my = g.lm_y[m] - 50 + 10;
@@ -1094,8 +1094,8 @@ static void laser_members(void)
     }
 }
 
-/* Strahlphasen wie ROM: laser_on 1 = waechst nach unten, 2 = wird sofort
- * von oben her wieder geloescht ($89E8: Loeschpass, gleiche Rate). */
+/* Beam phases as in ROM: laser_on 1 = grows downward, 2 = is erased
+ * again from the top at once ($89E8: erase pass, same rate). */
 static void laser_beams(void)
 {
     int s, y;
@@ -1107,18 +1107,18 @@ static void laser_beams(void)
         edge = g.lasery[s] + elapsed * LASER_SPEED;
         if (edge > LASER_BOT) edge = LASER_BOT;
         --g.lasertimer[s];
-        if (g.laser_on[s] == 1) {             /* Wachsphase: Kopf sinkt */
+        if (g.laser_on[s] == 1) {             /* grow phase: head sinks */
             for (y = g.lasery[s]; y < edge; ++y) plot(g.laserx[s], y, 1, 1);
-            if (g.lasertimer[s] <= 0) {       /* unten angekommen -> Loeschen */
+            if (g.lasertimer[s] <= 0) {       /* reached bottom -> erase */
                 g.laser_on[s] = 2;
                 g.lasertimer[s] = total;
             }
-        } else {                              /* Loeschpass von oben ($8A38) */
+        } else {                              /* erase pass from top ($8A38) */
             for (y = g.lasery[s]; y < edge; ++y) plot(g.laserx[s], y, 0, 1);
             if (g.lasertimer[s] <= 0) {
                 for (y = g.lasery[s]; y < LASER_BOT; ++y) plot(g.laserx[s], y, 0, 1);
                 g.laser_on[s] = 0;
-                if (g.turret[s]) laser_cannon_aim(s);  /* $8A43: weiterziehen */
+                if (g.turret[s]) laser_cannon_aim(s);  /* $8A43: keep moving */
                 continue;
             }
         }
@@ -1141,7 +1141,7 @@ static void laser_shot_hits(void)
 {
     int s, m;
     if (g.shot != 1) return;
-    for (s = 0; s < 2; ++s) {                 /* Kanonen (Hitbox wandert) */
+    for (s = 0; s < 2; ++s) {                 /* cannons (hitbox moves) */
         int tx, ty;
         if (!g.turret[s]) continue;
         tx = g.tur_x[s]; ty = g.tur_y[s];
@@ -1150,9 +1150,9 @@ static void laser_shot_hits(void)
             g.turret[s] = 0;
             laser_turret_blit(s, 1);
             boom_at(tx * 2 + 24, ty + 16 + 50);
-            add_score(6);                     /* Kanone 300 ($9438) */
+            add_score(6);                     /* cannon 300 ($9438) */
             --g.eleft;
-            /* $942E: alle sitzenden Member dieser Kanone stuerzen sofort */
+            /* $942E: all seated members of this cannon dive at once */
             for (m = s * 4; m < s * 4 + 4; ++m)
                 if (g.lm_state[m] == 0) laser_attack(m);
             shape_blit(0x1E, g.shotx, g.shoty, 8, 1, 1);
@@ -1160,7 +1160,7 @@ static void laser_shot_hits(void)
             return;
         }
     }
-    for (m = 0; m < 8; ++m) {                 /* Member ($95B1: 11 x 16) */
+    for (m = 0; m < 8; ++m) {                 /* member ($95B1: 11 x 16) */
         int mx, my, dx, dy;
         if (g.lm_state[m] == 0xFF || g.lm_boom[m]) continue;
         mx = (g.lm_x[m] - 24) / 2;
@@ -1168,10 +1168,10 @@ static void laser_shot_hits(void)
         dx = g.shotx - mx; if (dx < 0) dx = -dx;
         dy = g.shoty - my; if (dy < 0) dy = -dy;
         if (dx < 0x0B && dy < 0x10) {
-            g.lm_state[m] = 0xFF;             /* Slot bleibt dauerhaft leer */
+            g.lm_state[m] = 0xFF;             /* slot stays empty for good */
             g.lm_boom[m] = 16;
             --g.eleft;
-            add_score(2);                        /* alle Member 100 ($93D4) */
+            add_score(2);                        /* all members 100 ($93D4) */
             sound_play(SND_HIT);
             shape_blit(0x1E, g.shotx, g.shoty, 8, 1, 1);
             g.shot = -1;
@@ -1189,39 +1189,39 @@ static void laser_update(void)
     laser_members();
     laser_beams();
     laser_shot_hits();
-    /* Sprite 4 wird von Member 4 ueberzeichnet/abgeschaltet - Kanonen-
-     * Explosion danach erneut durchsetzen (Explosion hat Vorrang) */
+    /* sprite 4 gets overdrawn/disabled by member 4 - re-assert the
+     * cannon explosion afterwards (explosion takes priority) */
     boom_draw();
     if (g.eleft < 0) { g.state = ST_MISSION_CLEAR; g.statetimer = 120; }
 }
 
 /* ===================================================================== */
-/*  Space Warp (Mission 2) - Bitmapmodus                                 */
+/*  Space Warp (Mission 2) - bitmap mode                                 */
 /* ===================================================================== */
 
-/* Sprite-Bloecke Space Warp / Flag Ship */
-#define BLK_STONE   9      /* Stein, Taumelframes 9/10/11 ($49..$4B) */
-#define BLK_PIECE   7      /* abbrechendes Bruchstueck               */
+/* sprite blocks Space Warp / Flag Ship */
+#define BLK_STONE   9      /* rock, tumble frames 9/10/11 ($49..$4B) */
+#define BLK_PIECE   7      /* breaking-off fragment                  */
 
-/* Steinvektoren ($9192 / $919A) - immer abwaerts */
+/* rock vectors ($9192 / $919A) - always downward */
 static const signed char stone_dx[8] = { 0, 0,  1, -1,  2, -2,  3, -4 };
 static const signed char stone_dy[8] = { 2, 2,  3,  3,  2,  2,  1,  1 };
 
-/* Steigungsnenner ($987C): langsame Achse schreitet alle (slope+1) Frames */
+/* slope denominator ($987C): slow axis steps every (slope+1) frames */
 static const unsigned char warp_slope[8] = { 0, 1, 2, 3, 5, 6, 7, 127 };
 
-/* Fluchtpunkt in Multicolor-Pixeln (Original (80,75)) */
+/* vanishing point in multicolor px (original (80,75)) */
 #define WARP_CX 80
 #define WARP_CY 75
 
 
-/* gemeinsame Steinausgabe (Sprites), n Slots auf sp[] */
+/* shared rock output (sprites), n slots on sp[] */
 static void stones_update(const int *sp, int n)
 {
     int s;
     for (s = 0; s < n; ++s) {
         if (!g.stone_on[s]) { sprite_off(sp[s]); continue; }
-        if (!(g.frame & 1)) {             /* halbe Rate (~80 px/s, Video) */
+        if (!(g.frame & 1)) {             /* half rate (~80 px/s, video) */
             g.stone_x[s] += g.stone_vx[s];
             g.stone_y[s] += g.stone_vy[s];
         }
@@ -1229,7 +1229,7 @@ static void stones_update(const int *sp, int n)
             g.stone_x[s] < 8 || g.stone_x[s] > 344) {
             g.stone_on[s] = 0; sprite_off(sp[s]); continue;
         }
-        /* keine Rotation: Steine werden mit der Tiefe groesser (Video) */
+        /* no rotation: rocks grow bigger with depth (video) */
         set_sprite(sp[s],
                    BLK_STONE + ((g.stone_y[s] < 130) ? 0 :
                                 (g.stone_y[s] < 180) ? 1 : 2),
@@ -1248,7 +1248,7 @@ static int stone_spawn(int x, int y, int aimed, int n)
     int s, a, vx, vy;
     for (s = 0; s < n; ++s) if (!g.stone_on[s]) break;
     if (s >= n) return 0;
-    if (aimed) {                          /* $9BE0: quantisierte 8-Richtung */
+    if (aimed) {                          /* $9BE0: quantized 8-direction */
         int dxp = g.px - x, dyp = g.py - y;
         int sx = (dxp > 0) - (dxp < 0), sy = (dyp > 0) - (dyp < 0);
         int axp = dxp < 0 ? -dxp : dxp, ayp = dyp < 0 ? -dyp : dyp;
@@ -1257,7 +1257,7 @@ static int stone_spawn(int x, int y, int aimed, int n)
         else if (axp > ayp)             { vx = 3 * sx; vy = 1 * sy; }
         else                            { vx = 1 * sx; vy = 3 * sy; }
     } else {
-        a = rnd(8);                       /* $9192/$919A Zufallsvektoren */
+        a = rnd(8);                       /* $9192/$919A random vectors */
         vx = stone_dx[a]; vy = stone_dy[a];
     }
     g.stone_on[s] = 1;
@@ -1268,10 +1268,10 @@ static int stone_spawn(int x, int y, int aimed, int n)
     return 1;
 }
 
-/* DDA-Geradenmodell ($97CB): jedes Objekt zieht vom Fluchtpunkt eine feste
- * Gerade mit konstanter Geschwindigkeit. flags: bit3=schnelle Achse (1=X),
- * bit7=X-Richtung, bit6=Y-Richtung, bit0=Plot. slope = langsame-Achse-Teiler.
- * Richtung/Achse/Steigung bleiben im Flug konstant -> Sternexplosion. */
+/* DDA straight-line model ($97CB): each object draws a fixed straight
+ * line from vanishing point at constant speed. flags: bit3=fast axis (1=X),
+ * bit7=X-direction, bit6=Y-direction, bit0=plot. slope = slow-axis divider.
+ * direction/axis/slope stay constant in flight -> star explosion. */
 static void warp_respawn(int i)
 {
     g.wx[i] = WARP_CX; g.wy[i] = WARP_CY;
@@ -1283,13 +1283,13 @@ static void warp_respawn(int i)
 static void warp_init(void)
 {
     int i;
-    g.wmis_cool = 50;                     /* erste Wurf-Pause */
-    bitmap_clear();                       /* nur EINMAL - Spuren bleiben */
+    g.wmis_cool = 50;                     /* first toss pause */
+    bitmap_clear();                       /* ONCE only - trails remain */
     for (i = 0; i < 24; ++i) { warp_respawn(i); g.wflags[i] |= 1; }
-    stars_bitmap_all();                   /* weisse Sterne */
+    stars_bitmap_all();                   /* white stars */
     g.eleft = (g.rank == 0) ? 12 : 16;    /* $8CA1 / $825E[2]=$10 */
     memcpy(g.warp_shape, gd_sprites + 21 * 64, 64);   /* Ring = Block 21 */
-    if (g.rank == 0) {                    /* $8CA6: Marker-Vorbelegung $AA */
+    if (g.rank == 0) {                    /* $8CA6: marker preset $AA */
         g.warp_shape[0x10] = 0xAA;
         g.warp_shape[0x16] = 0xAA;
     }
@@ -1302,22 +1302,22 @@ static void warp_step_obj(int i)
 {
     int dx = (g.wflags[i] & 0x80) ? 1 : -1;
     int dy = (g.wflags[i] & 0x40) ? 1 : -1;
-    if (g.wflags[i] & 0x08) {             /* X = schnelle Achse */
+    if (g.wflags[i] & 0x08) {             /* X = fast axis */
         if (--g.wsub[i] < 0) { g.wy[i] += dy; g.wsub[i] = (signed char)g.wtype[i]; }
         g.wx[i] += dx;
-    } else {                             /* Y = schnelle Achse */
+    } else {                             /* Y = fast axis */
         if (--g.wsub[i] < 0) { g.wx[i] += dx; g.wsub[i] = (signed char)g.wtype[i]; }
         g.wy[i] += dy;
     }
     if (g.wx[i] <= 0 || g.wx[i] >= 160 || g.wy[i] <= 0 ||
         g.wy[i] >= 190 || g.wy[i] < 9) { warp_respawn(i); return; }
-    if (g.wflags[i] & 1) plot(g.wx[i], g.wy[i], 3, 0);   /* Spur bleibt stehen */
-    else plot(g.wx[i], g.wy[i], 0, 1);   /* Loesch-Stern frisst Spuren (Video) */
+    if (g.wflags[i] & 1) plot(g.wx[i], g.wy[i], 3, 0);   /* trail stays put */
+    else plot(g.wx[i], g.wy[i], 0, 1);   /* erase star eats trails (video) */
 }
 
-/* ===== Warp-Objekt (Sprite 2) + Missiles (Sprites 4-6) =============== */
-/* Spiral-Bahn: Vektor rotiert je Segment (sin/cos $8DC3/$8DE3, Segment-
- * laengen $8E03, Winkelindex $20->0; Index 0 = langer gerader Endspurt). */
+/* ===== Warp object (Sprite 2) + Missiles (Sprites 4-6) =============== */
+/* spiral path: vector rotates per segment (sin/cos $8DC3/$8DE3, segment
+ * lengths $8E03, angle index $20->0; index 0 = long straight final run). */
 static const signed char warp_dx[32] = {
     1,1,1,2,2,3,4,2,4,2,2,1,1,0,-1,-2,-2,-2,-2,-2,-1,0,1,3,2,1,1,-1,-1,-3,-1,-1 };
 static const signed char warp_dy[32] = {
@@ -1326,12 +1326,12 @@ static const unsigned char warp_seg[32] = {
     96,8,14,14,9,8,7,14,4,9,7,9,7,12,8,6,8,11,6,6,4,6,7,4,6,7,3,2,5,2,3,2 };
 static const unsigned char warp_quad[4] = { 0x00, 0x40, 0x80, 0xC0 };
 
-/* $8DBF: Startform je Typ (Zeiger $4C/$4F/$52 = Bloecke 12/15/18),
- * Wachstum = Stufe++ bei Winkelindex $16/$0C ($8D00 INC $43FA). */
+/* $8DBF: start shape per type (ptr $4C/$4F/$52 = blocks 12/15/18),
+ * growth = stage++ at angle index $16/$0C ($8D00 INC $43FA). */
 static const int wobj_blk[3] = { 12, 15, 18 };
-/* $A0AC: Explosionsfolge (Zeiger $5A,$59,$57,$56 = Bloecke 26,25,23,22) */
+/* $A0AC: explosion sequence (ptr $5A,$59,$57,$56 = blocks 26,25,23,22) */
 static const int wobj_boomseq[4] = { 26, 25, 23, 22 };
-/* $8E23/$8E33: Ringmarker - EOR-Maske / Byteoffset im Ring-Shape */
+/* $8E23/$8E33: ring marker - EOR mask/byte offset in ring shape */
 static const unsigned char wring_msk[16] = {
     0x0C,0xC0,0x30,0x30,0xC0,0x0C,0xC0,0x0C,0x30,0x30,0x0C,0xC0,0x0C,0x0C,0xC0,0xC0 };
 static const unsigned char wring_off[16] = {
@@ -1346,10 +1346,10 @@ static void set_sprite_data(int i, const unsigned char *data, int x, int y, int 
 
 static void wobj_spawn(void)
 {
-    g.wobj_type  = rnd(3);                /* $8D5C: Typ 1..3 */
+    g.wobj_type  = rnd(3);                /* $8D5C type 1..3 */
     g.wobj_frame = 0;
-    g.wobj_quad  = warp_quad[rnd(4)];     /* $8DBC Vorzeichen */
-    g.wobj_swap  = (unsigned char)rnd(2); /* Drehsinn (Tabellen-Swap $8D6D) */
+    g.wobj_quad  = warp_quad[rnd(4)];     /* $8DBC sign */
+    g.wobj_swap  = (unsigned char)rnd(2); /* spin sense (table swap $8D6D) */
     g.wobj_angle = 31;                    /* $79 = $20 */
     g.wobj_timer = warp_seg[31];
     g.wobj_x = WOBJ_CX;
@@ -1357,45 +1357,45 @@ static void wobj_spawn(void)
     g.wobj_on = 1;
 }
 
-/* Ring-Sprite (Block 21) am Zentrum ($D00E/$D00F=$AD/$70), Y-expandiert,
- * blau ($D02E=6); Marker je Ausstossung aus der Arbeitskopie geloescht. */
+/* ring sprite (block 21) at center ($D00E/$D00F=$AD/$70), Y-expanded,
+ * blue ($D02E=6); marker cleared from the work copy per ejection. */
 static void warp_ringsprite(void)
 {
-    /* Flaeche (%10) = Spritefarbe 0 schwarz -> "schwarzes Loch";
-     * Punktkranz (%01) = MC0 gelb */
+    /* area (%10) = sprite color 0 black -> "black hole";
+     * dot ring (%01) = MC0 yellow */
     set_sprite_data(SP_WRING, g.warp_shape, 0xAD, 0x70, 0);
     vic.spyexp = (unsigned short)(vic.spyexp | (1 << SP_WRING));
 }
 
-/* Warp-Objekt: Ausstossen, Spiralflug, Wachstum, Kollisionen ($8CE2/$943B) */
+/* warp object: ejection, spiral flight, growth, collisions ($8CE2/$943B) */
 static void warp_object(void)
 {
     int idx, dx, dy, ax, ay;
-    if (g.wobj_boom > 0) {                /* Explosionsfolge, 4 Frames je */
+    if (g.wobj_boom > 0) {                /* explosion seq, 4 frames each */
         --g.wobj_boom;
         if (!g.wobj_boom) { sprite_off(SP_WOBJ); return; }
         set_sprite(SP_WOBJ, wobj_boomseq[3 - g.wobj_boom / 4],
                    g.wobj_x, g.wobj_y, 7, 1);
         return;
     }
-    if (!g.wobj_on) {                     /* $8D3D: naechste Ausstossung */
+    if (!g.wobj_on) {                     /* $8D3D: next ejection */
         --g.eleft;
         if (g.eleft < 0) return;
-        if (g.eleft < 16)                 /* Ringmarker toggeln ($8D41) */
+        if (g.eleft < 16)                 /* toggle ring marker ($8D41) */
             g.warp_shape[wring_off[g.eleft]] ^= wring_msk[g.eleft];
         wobj_spawn();
         sound_play(SND_EJECT);
         return;
     }
-    /* Rang 0: der GANZE Objekt-Move nur jeden 2. Frame ($8CEA-Gate liegt
-     * vor dem kompletten Block -> ~25-75 px/s wie im Video).
-     * Rang 1: 3/4-Rate als Zwischenstufe (Vollrate war zu harter Sprung) */
+    /* Rank 0: the WHOLE object move only every 2nd frame ($8CEA gate sits
+     * before the complete block -> ~25-75 px/s as in the video).
+     * Rank 1: 3/4 rate as intermediate (full rate was too harsh a jump) */
     if ((g.rank == 0) ? !(g.frame & 1)
         : (g.rank == 1) ? ((g.frame & 3) != 3) : 1) {
         if (--g.wobj_timer <= 0 && g.wobj_angle > 0) {
             --g.wobj_angle;
             if (g.wobj_angle == 0x16 || g.wobj_angle == 0x0C)
-                if (g.wobj_frame < 2) ++g.wobj_frame;   /* Wachstumsstufe */
+                if (g.wobj_frame < 2) ++g.wobj_frame;   /* growth stage */
             g.wobj_timer = warp_seg[g.wobj_angle];
         }
         idx = g.wobj_angle & 31;
@@ -1406,14 +1406,14 @@ static void warp_object(void)
         g.wobj_x += dx;
         g.wobj_y += dy;
         if (g.wobj_x <= 0 || g.wobj_x > 0x157 ||
-            g.wobj_y < 0x1D || g.wobj_y > 0xF9) {   /* Fensteraustritt */
+            g.wobj_y < 0x1D || g.wobj_y > 0xF9) {   /* window exit */
             g.wobj_on = 0; sprite_off(SP_WOBJ);
             return;
         }
     }
     set_sprite(SP_WOBJ, wobj_blk[g.wobj_type] + g.wobj_frame,
-               g.wobj_x, g.wobj_y, 1, 1);       /* weiss ($D029=$01) */
-    /* Spieler-Kollision (enger als volle Spritebox) */
+               g.wobj_x, g.wobj_y, 1, 1);       /* white ($D029=$01) */
+    /* player collision (tighter than full sprite) */
     ax = g.wobj_x - g.px; if (ax < 0) ax = -ax;
     ay = g.wobj_y - g.py; if (ay < 0) ay = -ay;
     if (!g.pdead && ax < 0x10 && ay < 0x12) {
@@ -1424,7 +1424,7 @@ static void warp_object(void)
         g.statetimer = 60;
         return;
     }
-    /* Schuss-Kollision: pixelgenau ($D01E-Semantik) */
+    /* shot collision: pixel-exact ($D01E semantics) */
     if (g.shot == 2) {
         if (vic_sprites_overlap(SP_SHOT, SP_WOBJ)) {
             add_score(5);                 /* 250 */
@@ -1436,8 +1436,8 @@ static void warp_object(void)
     }
 }
 
-/* Missiles: das Objekt feuert Steine auf den Spieler ($9084 Spawner,
- * $91A2 Bewegung; Form-Anim Bloecke 9-11 alle 24 Frames). */
+/* Missiles: the object fires rocks at the player ($9084 spawner,
+ * $91A2 movement; shape anim blocks 9-11 every 24 frames). */
 static const int wmis_sp[3]    = { 4, 5, 6 };
 static const int wmis_slots[6] = { 1, 1, 2, 2, 3, 3 };   /* $9261 */
 static const int wmis_rate[6]  = { 7, 7, 3, 3, 1, 0 };   /* $9267 */
@@ -1445,15 +1445,15 @@ static const int wmis_rate[6]  = { 7, 7, 3, 3, 1, 0 };   /* $9267 */
 static void warp_missiles(void)
 {
     int s, nmax = wmis_slots[g.rank];
-    /* Spawner: nur wenn Objekt aktiv und Spieler lebt ($32-Gate);
-     * Cooldown zwischen Wuerfen (sonst Dauerfeuer = "zielt zu scharf") */
+    /* spawner: only if object active and player alive ($32 gate);
+     * cooldown between throws (else steady fire = "aims too sharply") */
     if (g.wmis_cool > 0) --g.wmis_cool;
     if (g.wobj_on && !g.pdead && g.state == ST_PLAY && g.wmis_cool <= 0) {
         for (s = 0; s < nmax; ++s) if (!g.stone_on[s]) break;
         if (s < nmax) {
             int vx, vy;
             if ((g.frame & wmis_rate[g.rank]) == wmis_rate[g.rank]) {
-                /* gezielt ($9BE0): groessere Achse 3, kleinere 1; gleich 2/2 */
+                /* aimed ($9BE0): larger axis 3, smaller 1; equal 2/2 */
                 int dxp = g.px - g.wobj_x, dyp = g.py - (g.wobj_y + 10);
                 int sx = (dxp > 0) - (dxp < 0), sy = (dyp > 0) - (dyp < 0);
                 int axp = dxp < 0 ? -dxp : dxp, ayp = dyp < 0 ? -dyp : dyp;
@@ -1470,13 +1470,13 @@ static void warp_missiles(void)
             g.stone_vx[s] = (signed char)vx;
             g.stone_vy[s] = (signed char)vy;
             g.stone_frame[s] = 0;
-            g.wmis_cool = 22 + rnd(20);   /* ~0.4-0.8s Pause bis zum naechsten */
+            g.wmis_cool = 22 + rnd(20);   /* ~0.4-0.8s pause until the next */
         }
     }
     for (s = 0; s < 3; ++s) {
         int ax, ay;
         if (!g.stone_on[s]) { sprite_off(wmis_sp[s]); continue; }
-        /* Rang 0 halbe, Rang 1 3/4-Rate (Zwischenstufe), sonst voll */
+        /* rank 0 half, rank 1 3/4 rate (intermediate), else full */
         if ((g.rank == 0) ? !(g.frame & 1)
             : (g.rank == 1) ? ((g.frame & 3) != 3) : 1) {
             g.stone_x[s] += g.stone_vx[s];
@@ -1507,7 +1507,7 @@ static void warp_update(void)
     static int rr;
     int k;
     ++g.warptimer;
-    /* 24 Sterne (gerade DDA-Radialspuren), 8 pro Frame Round-Robin */
+    /* 24 stars (straight DDA radial trails), 8/frame round-robin */
     for (k = 0; k < 8; ++k) { rr = (rr + 23) % 24; warp_step_obj(rr); }
     star_twinkle();
     warp_object();
@@ -1520,14 +1520,14 @@ static void warp_update(void)
 }
 
 /* ===================================================================== */
-/*  Flag Ship (Mission 3) - Textmodus                                    */
+/*  Flag Ship (Mission 3) - text mode                                    */
 /* ===================================================================== */
 
-#define SP_PIECE 7            /* abbrechendes Teil (Flag Ship) */
+#define SP_PIECE 7            /* breaking-off part (Flag Ship) */
 #define FLAG_YMIN 0x50
 #define FLAG_YMAX 0x6C
 
-/* MC-Pixelwert (0..3) an Datenposition (col hires 0..23, row 0..20) */
+/* MC pixel value (0..3) at data pos (col hires 0..23, row 0..20) */
 static int spr_mc(const unsigned char *d, int col, int row)
 {
     int mc = col >> 1, b, sh;
@@ -1535,7 +1535,7 @@ static int spr_mc(const unsigned char *d, int col, int row)
     b = row * 3 + (mc >> 2); sh = (3 - (mc & 3)) * 2;
     return (d[b] >> sh) & 3;
 }
-/* MC-Pixel loeschen */
+/* clear MC pixel */
 static void spr_clr(unsigned char *d, int col, int row)
 {
     int mc = col >> 1, b, sh;
@@ -1543,7 +1543,7 @@ static void spr_clr(unsigned char *d, int col, int row)
     b = row * 3 + (mc >> 2); sh = (3 - (mc & 3)) * 2;
     d[b] = (unsigned char)(d[b] & ~(3 << sh));
 }
-/* horizontal gespiegelte Kopie (12 MC-Pixel je Zeile umkehren) */
+/* horizontally mirrored copy (reverse 12 MC pixels per line) */
 static void spr_mirror(unsigned char *dst, const unsigned char *src)
 {
     int row, mc;
@@ -1556,8 +1556,8 @@ static void spr_mirror(unsigned char *dst, const unsigned char *src)
             dst[db] = (unsigned char)(dst[db] | (v << ds));
         }
 }
-/* Bruchstueck: kleines VIERECK 4x3 Pixel (Nutzer);
- * %10-Paare -> Farbe = Spritefarbe (piece_col) */
+/* fragment: small RECTANGLE 4x3 pixels (user);
+ * %10 pairs -> color = sprite color (piece_col) */
 static const unsigned char piece_spr[64] = {
     0xA0,0,0, 0xA0,0,0, 0xA0,0,0, 0,0,0, 0,0,0,
     0,0,0, 0,0,0, 0,0,0, 0,0,0, 0,0,0,
@@ -1565,7 +1565,7 @@ static const unsigned char piece_spr[64] = {
     0,0,0, 0,0,0, 0,0,0, 0,0,0,0
 };
 
-/* Zelle fuer stufenloses RGB-Dimmen im Overlay vormerken (a 0..256) */
+/* mark cell for stepless RGB dimming in the overlay (a 0..256) */
 static void tw_push(int cx, int cy, int a)
 {
     if (g.tw_n >= 64) return;
@@ -1577,9 +1577,9 @@ static void tw_push(int cx, int cy, int a)
     ++g.tw_n;
 }
 
-static int flag_hitv = 1;   /* Paarwert des zuletzt getroffenen Materials */
+static int flag_hitv = 1;   /* pair value of the last material hit */
 
-/* Sprite i direkt aus einem Datenpuffer setzen (Multicolor) */
+/* set sprite i directly from a data buffer (multicolor) */
 static void set_sprite_data(int i, const unsigned char *data, int x, int y, int col)
 {
     memcpy(vic.spdata[i], data, 64);
@@ -1591,44 +1591,44 @@ static void set_sprite_data(int i, const unsigned char *data, int x, int y, int 
 static void flag_init(void)
 {
     int i;
-    memcpy(g.flagdata[0], gd_sprites + BLK_FLAG_L*64, 64);   /* Rumpf links (mit rotem Tank) */
-    memcpy(g.flagdata[1], gd_sprites + BLK_FLAG_R*64, 64);   /* duenner Bug rechts */
+    memcpy(g.flagdata[0], gd_sprites + BLK_FLAG_L*64, 64);   /* hull left (with red tank) */
+    memcpy(g.flagdata[1], gd_sprites + BLK_FLAG_R*64, 64);   /* thin bow right */
     g.flagx = 60; g.flagy = FLAG_YMIN;
-    g.flagdir = 1; g.flagdy = 2; g.flag_face = 1;   /* Bug rechts */
-    g.flaghp = 1;                          /* ROM: EIN %11-Treffer zerstoert */
+    g.flagdir = 1; g.flagdy = 2; g.flag_face = 1;   /* bow right */
+    g.flaghp = 1;                          /* ROM: ONE %11 hit destroys */
     g.eleft = 0;
     g.piece_on = 0;
     g.flag_aggro = 0;
     g.fp_n = 0;
     g.ap_n = 0;
-    memset(g.shield, 0xFF, sizeof(g.shield));   /* gepunkteter Schutzbogen intakt */
+    memset(g.shield, 0xFF, sizeof(g.shield));   /* dotted protective arc intact */
     for (i = 0; i < 4; ++i) g.stone_on[i] = 0;
 }
 
-/* Grosses Schiff = 2 X-expandierte Haelften (je 24px Daten ->48px) = 96px.
- * Beim Wenden wird das GANZE Schiff gespiegelt (Bug in Fahrtrichtung). */
+/* Big ship = 2 X-expanded halves (24px data each ->48px) = 96px.
+ * When turning, the WHOLE ship is mirrored (bow in travel direction). */
 static void flag_draw_ship(void)
 {
     unsigned char tmp[64];
-    if (g.flag_face) {                     /* Bug rechts: kanonisch */
+    if (g.flag_face) {                     /* bow right: canonical */
         set_sprite_data(2, g.flagdata[0], g.flagx,      g.flagy, 6);
         set_sprite_data(3, g.flagdata[1], g.flagx + 48, g.flagy, 6);
-    } else {                               /* Bug links: gespiegelt + getauscht */
+    } else {                               /* bow left: mirrored + swapped */
         spr_mirror(tmp, g.flagdata[1]); set_sprite_data(2, tmp, g.flagx,      g.flagy, 6);
         spr_mirror(tmp, g.flagdata[0]); set_sprite_data(3, tmp, g.flagx + 48, g.flagy, 6);
     }
     vic.spxexp |= (unsigned short)((1<<2)|(1<<3));
 }
 
-/* Schuss trifft Schiffshaelfte spr(2/3). ROM $8F7C-$8FFA byteverifiziert:
- * Trefferzelle = SCHUSSSPITZE (Paar = dx/4 wg. X-Expand, Reihe = dy 1:1),
- * KEINE Suche - dann 1 Paar x 4 Reihen ABWAERTS loeschen ($98FA-Maske,
- * Clip am Spriteende). Trifft die Schleife dabei ein %11-Paar in den
- * Reihen 0-13 (Fenster $02..$27; Tank UND Bugspitze) -> Sofort-Zerstoerung.
- * Leere Zellen sind No-Ops; der Schuss ist immer verbraucht (20 Punkte).
- * Durch komplett erodierte Loecher fliegt der Schuss durch - das regelt
- * der Aufrufer via vic_sprites_overlap (HW-Latch-Aequivalent).
- * 2=Zerstoerung, 1=Schale/Leerlauf. */
+/* Shot hits ship half spr(2/3). ROM $8F7C-$8FFA byte-verified:
+ * hit cell = SHOT TIP (pair = dx/4 due to X-expand, row = dy 1:1),
+ * NO search - then clear 1 pair x 4 rows DOWNWARD ($98FA mask,
+ * clip at sprite end). If the loop thereby hits a %11 pair in
+ * rows 0-13 (window $02..$27; tank AND bow tip) -> instant destruction.
+ * Empty cells are no-ops; the shot is always consumed (20 points).
+ * Through fully eroded holes the shot passes through - the caller
+ * handles that via vic_sprites_overlap (HW latch equivalent).
+ * 2=destruction, 1=shell/idle. */
 static int flag_hit_half(int spr)
 {
     int spx  = (spr==2) ? g.flagx : g.flagx + 48;
@@ -1637,7 +1637,7 @@ static int flag_hit_half(int spr)
     int pair = (g.shotx - spx) >> 2;
     int dy   = g.shoty - g.flagy;
     int canon, k, core = 0;
-    if (pair < 0 || pair > 11 || dy < 0) return 1;   /* $3F-Clip: nur 20 Pkt */
+    if (pair < 0 || pair > 11 || dy < 0) return 1;   /* $3F clip: only 20 pt */
     canon = mirror ? (11 - pair) : pair;
     for (k = 0; k < 4 && dy + k <= 20; ++k) {
         int v = spr_mc(g.flagdata[half], canon * 2, dy + k);
@@ -1648,14 +1648,14 @@ static int flag_hit_half(int spr)
     return core ? 2 : 1;
 }
 
-/* Schiffszerfall: die verbliebenen Pixel des Schiffs werden zu farbigen
- * Partikeln (%01 gelb, %10 blau, %11 rot), die wie die Sterne im Finale
- * herunterregnen (Nutzerwunsch). */
+/* ship breakup: the remaining pixels of the ship turn into colored
+ * particles (%01 yellow, %10 blue, %11 red) that rain down like the
+ * stars in the finale (user request). */
 static void flag_explode_parts(void)
 {
     static const unsigned char pc[4] = { 0, 7, 6, 2 };
     int half, r, pair;
-    int cx8 = g.flagx + 48 - 24, cy8 = g.flagy - 50 + 10;   /* Zentrum */
+    int cx8 = g.flagx + 48 - 24, cy8 = g.flagy - 50 + 10;   /* center */
     g.fp_n = 0;
     for (half = 0; half < 2; ++half) {
         int base = g.flag_face ? (half ? g.flagx + 48 : g.flagx)
@@ -1668,7 +1668,7 @@ static void flag_explode_parts(void)
                 if (!v || g.fp_n >= 160 || rnd(3) == 2) continue;
                 px = base - 24 + sp * 4;
                 py = g.flagy - 50 + r;
-                /* radial wegschleudern (gemaechlich) + Streuung */
+                /* fling outward radially (leisurely) + scatter */
                 vx = (px > cx8 ? 1 : -1) * (1 + rnd(2)) + rnd(3) - 1;
                 vy = (py > cy8 ? 1 : -1) * (1 + rnd(2)) + rnd(3) - 2;
                 g.fp_x8[g.fp_n] = px;
@@ -1683,16 +1683,16 @@ static void flag_explode_parts(void)
 
 static void flag_parts_update(void)
 {
-    /* Ballistik: Teile fliegen radial auseinander, Gravitation zieht
-     * sie in Boegen nach unten. Mit dem Alter wachsen die Glyphen
-     * (Sternchen -> dicker Stern -> Block) = Teile kommen NAEHER. */
+    /* ballistics: parts fly apart radially, gravity pulls them
+     * down in arcs. With age the glyphs grow (asterisk ->
+     * fat star -> block) = parts come CLOSER. */
     int i, age, gl;
     age = (g.flag_boomt > 0) ? 240 - g.flag_boomt
         : (g.flag_outro > 0) ? 240 + (422 - g.flag_outro) : 240;
     gl  = (age < 40) ? CH_STAR : (age < 90) ? 0x6A : 0x63;
     for (i = 0; i < g.fp_n; ++i) {
         int col = g.fp_x8[i] >> 3, row = g.fp_y8[i] >> 3, nc, nr;
-        if (row > 23 || col < 0 || col > 39) continue;   /* raus */
+        if (row > 23 || col < 0 || col > 39) continue;   /* out */
         g.fp_x8[i] += g.fp_vx[i];
         g.fp_y8[i] += g.fp_vy[i];
         if ((g.frame & 7) == 0 && g.fp_vy[i] < 3) ++g.fp_vy[i];
@@ -1705,27 +1705,27 @@ static void flag_parts_update(void)
     }
 }
 
-/* Schiffszerstoerung ($9002-$9D21): Explosion, Extraleben Rang 0,
- * Pixelregen, 1000 Punkte */
+/* ship destruction ($9002-$9D21): explosion, extra life rank 0,
+ * pixel rain, 1000 points */
 static void flag_kill(void)
 {
     g.flaghp = 0;
     boom_at(g.flagx + 48, g.flagy);
     vic.spxexp = (unsigned short)(vic.spxexp | (1 << SP_BOOM));
     vic.spyexp = (unsigned short)(vic.spyexp | (1 << SP_BOOM));
-    g.flag_boomt = 240;                   /* lange Explosion (~5s, Longplay) */
+    g.flag_boomt = 240;                   /* long explosion (~5s, longplay) */
     sound_play(SND_BIGBOOM);
     if (g.rank == 0 && g.lives < 6) ++g.lives;   /* $9009 */
     g.flag_bx = (g.flagx + 48 - 24) / 8;
     g.flag_by = (g.flagy - 50) / 8 + 1;
-    flag_explode_parts();                 /* Zerfall + Pixelregen */
+    flag_explode_parts();                 /* breakup + pixel rain */
     sprite_off(2); sprite_off(3);
     add_score(7);                         /* 1000 ($9000) */
     --g.eleft;
 }
 
-/* TEMP Debug (Taste 6): Flagship-Todessequenz ausloesen; ein noch
- * laufendes Missions-Intro wird dabei uebersprungen */
+/* TEMP debug (key 6): trigger flagship death sequence; a mission
+ * intro still running is skipped in the process */
 void game_debug_win(void)
 {
     if (g.mission != 3 || g.flaghp <= 0 || g.flag_boomt > 0) return;
@@ -1734,19 +1734,19 @@ void game_debug_win(void)
     flag_kill();
 }
 
-/* Riesige Todes-Explosion: 8 Strahlen wachsen radial aus dem Schiff
- * (Textmatrix), dazu doppelt grosses Explosionssprite. */
+/* Huge death explosion: 8 rays grow radially out of the ship
+ * (text matrix), plus a double-size explosion sprite. */
 static void flag_bigboom(void)
 {
-    /* Vollbild-Blitze + Shake; die rotierenden Explosionsstrahlen
-     * zeichnet der Pixel-Post-Pass flagboom_fx (nichts bleibt stehen) */
+    /* fullscreen flashes + shake; the rotating explosion rays
+     * are drawn by the pixel-post-pass flagboom_fx (nothing stays) */
     static const unsigned char flashc[8] = { 3, 2, 1, 0, 15, 4, 13, 6 };
     if (g.flag_boomt <= 0) return;
     --g.flag_boomt;
-    if (g.flag_boomt > 110)               /* Phase 1: Vollbild-Farbblitze */
+    if (g.flag_boomt > 110)               /* phase 1: color screen flash */
         vic.bg = vic.border = flashc[(g.flag_boomt >> 1) & 7];
     else { vic.bg = 0; vic.border = 0; }
-    vic_shake_x = rnd(7) - 3;             /* Screenshake (Nutzerwunsch) */
+    vic_shake_x = rnd(7) - 3;             /* screenshake (user request) */
     vic_shake_y = rnd(5) - 2;
     if (g.flag_boomt == 0) {
         vic.bg = 0; vic.border = 0;
@@ -1754,7 +1754,7 @@ static void flag_bigboom(void)
         sprite_off(2); sprite_off(3);
         vic.spxexp = (unsigned short)(vic.spxexp & ~(1 << SP_BOOM));
         vic.spyexp = (unsigned short)(vic.spyexp & ~(1 << SP_BOOM));
-        g.flag_outro = 422;               /* Finale (Laenge: youwon-Sample) */
+        g.flag_outro = 422;               /* finale (length: youwon sample) */
     }
 }
 
@@ -1763,20 +1763,20 @@ static void flag_update(void)
     static const int stone_sp[2] = { 5, 6 };
     int hit;
 
-    flag_parts_update();                  /* Schiffs-Pixelregen (auch Outro) */
+    flag_parts_update();                  /* ship pixel rain (also outro) */
 
-    if (g.flag_outro > 0) {               /* Finale: Sterne fallen, Typewriter-
-                                           * Untertitel zum Sprachsample, Fade */
+    if (g.flag_outro > 0) {               /* finale: stars fall, typewriter
+                                           * subtitles to speech sample, fade */
         static const char *wl1a = "YOU WON. FOR NOW.";
         static const char *wl1b = "YOU WON. AGAIN!";
         static const char *wl2 = "GORPHIANS CONQUER YOUR NEXT GALAXY!";
-        int e = 422 - g.flag_outro;       /* verstrichene Frames */
-        int v2 = (g.level >= 8);          /* ab MS:08: "AGAIN!"-Variante */
+        int e = 422 - g.flag_outro;       /* elapsed frames */
+        int v2 = (g.level >= 8);          /* MS:08+: "AGAIN!" variant */
         const char *wl1 = v2 ? wl1b : wl1a;
         int n1 = v2 ? 15 : 17, c1 = v2 ? 12 : 11, n2 = 35, i, shown;
         --g.flag_outro;
-        /* Matrix-Sterne raus (Pixel-Starfield uebernimmt); Schutzbogen-
-         * Zellen werden zu rieselnden Pixel-Partikeln eingesammelt */
+        /* matrix stars out (pixel starfield takes over); protective-arc
+         * cells are collected into trickling pixel particles */
         if (e == 0) {
             int c2, r2;
             g.ap_n = 0;
@@ -1796,29 +1796,29 @@ static void flag_update(void)
                     }
                 }
         }
-        {   /* Schirm-Schrott rieselt (Zeichnung: outro_arcfall);
-             * dazu leises Rieselgeraeusch solange er faellt */
+        {   /* shield debris trickles down (drawing: outro_arcfall);
+             * plus a soft trickling sound while it falls */
             int i2;
             for (i2 = 0; i2 < g.ap_n; ++i2) g.ap_y8[i2] += g.ap_v[i2];
             sound_wind((e < 130 && g.ap_n > 0) ? 14 : 0);
         }
-        /* Watermark-Robot: Alpha-Rampe rein (waehrend die Stimme
-         * spricht), halten, nach dem Text sauber raus */
+        /* watermark robot: alpha ramp in (while the voice is
+         * speaking), hold, cleanly out after the text */
         g.robot_a = (e < 20) ? 0
                   : (e < 70)  ? (e - 20) * 30 / 50
                   : (e < 300) ? 30
                   : (e < 350) ? (350 - e) * 30 / 50 : 0;
-        /* Spielerschiff flackert kurz und verschwindet, bevor der Text
-         * beginnt (stand sonst ueber Zeile 19) */
+        /* player ship flickers briefly and vanishes before the text
+         * starts (otherwise it sat over line 19) */
         if (e >= 28 || (e >= 8 && ((e >> 2) & 1)))
             sprite_off(SP_PLAYER);
         if (e == 20) sound_play(v2 ? SND_WON2 : SND_WON);
-        /* Typewriter LIPPENSYNCHRON: Zeichen-Zeitplan aus der Huellkurve
-         * des youwon-Samples (4 Sprechphrasen, Zeichen je Phrase linear
-         * verteilt); Einblenden dunkelblau -> cyan -> weiss. */
+        /* typewriter LIP-SYNCED: character schedule from the envelope
+         * of the youwon sample (4 speech phrases, characters per phrase
+         * spread linearly); fade in dark blue -> cyan -> white. */
         {
-            /* GORPHIANS = 9 Zeichen: gleiche Sprechphrase, ein Zeichen
-             * mehr linear in dasselbe Zeitfenster verteilt */
+            /* GORPHIANS = 9 characters: same speech phrase, one character
+             * more spread linearly in the same time window */
             static const unsigned short wct2[50] = {
                  24, 32, 40, 48, 56, 64, 72, 80, 88, 96,104,112,120,
                 128,136,162,166,170,174,178,182,186,191,195,200,204,
@@ -1836,7 +1836,7 @@ static void flag_update(void)
                 shown = i + 1;
                 age = e - (int)(v2 ? wct2[i] : wct[i]);
                 {
-                    /* stufenlos: weiss zeichnen, RGB-Alpha via Overlay */
+                    /* stepless: draw white, RGB alpha via overlay */
                     int a = age * 256 / 10;
                     if (i < n1) {
                         mat_put(c1 + i, 17, char_hires(wl1[i]), 1, 1);
@@ -1848,7 +1848,7 @@ static void flag_update(void)
                 }
             }
         }
-        if (e >= 30) {                    /* Cursor pulst per RGB-Alpha */
+        if (e >= 30) {                    /* cursor pulses by RGB alpha */
             int p2 = e % 24, tri = (p2 < 12) ? p2 : 23 - p2;
             if (shown < n1) {
                 mat_put(c1 + shown, 17, 0x60, 1, 1);
@@ -1858,26 +1858,26 @@ static void flag_update(void)
                 tw_push(2 + (shown - n1), 19, tri * 256 / 11);
             }
         }
-        /* Kein Ausfaden - der TV-Glitch IST der Uebergang: letzte 62
-         * Outro-Frames rollt/stoert das alte Bild (Phase A), danach
-         * schiebt sich das neue Level rein (Phase B). Sample laeuft 2x. */
+        /* No fade out - the TV glitch IS the transition: the last 62
+         * outro frames roll/glitch the old image (phase A), then
+         * the new level slides in (phase B). Sample plays 2x. */
         if (g.flag_outro == 62) {
             g.glitcht = 124;
             sound_play(SND_GLITCH);
         }
         if (g.flag_outro <= 0) {
             g.state = ST_MISSION_CLEAR;
-            g.statetimer = 1;             /* nahtlos weiter in Phase B */
+            g.statetimer = 1;             /* seamlessly into phase B */
         }
         return;
     }
 
     shield_flicker();
-    shield_draw(1);                       /* gepunkteter Deko-Bogen */
-    text_stars();                         /* weisse Sterne mit Funkeln */
+    shield_draw(1);                       /* dotted decorative arc */
+    text_stars();                         /* white stars with sparkle */
     flag_bigboom();
 
-    g.flagx += g.flagdir;                 /* ~50 px/s (Longplay-Messung) */
+    g.flagx += g.flagdir;                 /* ~50 px/s (from longplay) */
     if (g.flagx < 24 || g.flagx > 232) {
         g.flagdir = -g.flagdir;
         g.flag_face = !g.flag_face;
@@ -1886,7 +1886,7 @@ static void flag_update(void)
     }
     if (g.flaghp > 0) flag_draw_ship();
 
-    /* $8EAA-$8EB8: Steinaufkommen waechst im Missionsverlauf (moderat) */
+    /* $8EAA-$8EB8: rock rate grows over the mission course (moderate) */
     if (g.flaghp > 0 && (g.frame % 300) == 0 && g.flag_aggro < 5)
         ++g.flag_aggro;
     {
@@ -1895,10 +1895,10 @@ static void flag_update(void)
         if (g.flaghp > 0 && (g.frame % iv) == 0)
             stone_spawn(g.flagx + 48, g.flagy + 24,
                         ((g.frame & wmis_rate[g.rank]) == wmis_rate[g.rank]),
-                        2);               /* Zielrate $9267: Rang 0 = 1/8 */
+                        2);               /* target $9267: rank 0 = 1/8 */
     }
     stones_update(stone_sp, 2);
-    /* Steine beschaedigen den Schutzbogen NICHT - nur der Spielerschuss. */
+    /* Rocks do NOT damage the shield arc - only the player shot does. */
 
     if (g.piece_on) {
         g.piece_x += g.piece_vx; g.piece_y += g.piece_vy;
@@ -1908,15 +1908,15 @@ static void flag_update(void)
                                g.piece_col);
     }
 
-    /* Spielerschuss schlaegt ebenfalls Luecken in den Schutzbogen -
-     * intakter Bogen blockt den Schuss (erst Loch schiessen, dann Schiff) */
+    /* The player shot also knocks gaps into the shield arc -
+     * an intact arc blocks the shot (shoot a hole first, then ship) */
     if (g.shot == 2 && vic_sprite_hits_code(SP_SHOT, 0x19, 0x1D)) {
         shield_hit_col((g.shotx - 24) >> 3);
         g.shot = -1; sprite_off(SP_SHOT);
         sound_play(SND_HIT);
     }
 
-    /* Schuss vs fliegendes Bruchstueck (150, $94E8) und Steine (100, $9510) */
+    /* Shot vs flying fragment (150, $94E8) and rocks (100, $9510) */
     if (g.shot == 2) {
         int s2, dxp, dyp;
         if (g.piece_on) {
@@ -1942,37 +1942,37 @@ static void flag_update(void)
         }
     }
 
-    /* Schuss: Schale abtragen, bis der rote Kern (Tank) frei liegt. */
+    /* Shot: strip the shell until the red core (tank) is exposed. */
     if (g.flaghp > 0 && g.shot == 2) {
         hit = 0;
-        /* HW-treue Kollision: %01-Schale ist transparent - der Schuss
-         * dringt bis zum %10/%11-Material vor (dicke Bisse wie Original) */
+        /* HW-true collision: %01 shell is transparent - the shot
+         * penetrates to %10/%11 material (thick bites like original) */
         if (vic_sprites_overlap_hw(SP_SHOT, 2))      hit = flag_hit_half(2);
         else if (vic_sprites_overlap_hw(SP_SHOT, 3)) hit = flag_hit_half(3);
-        if (hit == 2) {                    /* %11 getroffen -> Sofort-Zerstoerung */
+        if (hit == 2) {                    /* %11 hit -> instant destruction */
             g.shot = -1; sprite_off(SP_SHOT);
             flag_kill();
-        } else if (hit == 1) {             /* Schale abgetragen -> Splitter */
+        } else if (hit == 1) {             /* shell stripped -> shards */
             g.shot = -1; sprite_off(SP_SHOT);
             if (!g.piece_on) {
                 g.piece_on = 1;
                 g.piece_x = g.shotx; g.piece_y = g.shoty;
-                g.piece_vx = (signed char)(rnd(3) - 1);   /* langsam */
+                g.piece_vx = (signed char)(rnd(3) - 1);   /* slow */
                 g.piece_vy = 1;
-                /* Farbe des abgeschossenen Materials: %01 gelb, %10 blau,
-                 * %11 rot */
+                /* Color of the material shot away: %01 yellow, %10 blue,
+                 * %11 red */
                 g.piece_col = (flag_hitv == 1) ? 7 : (flag_hitv == 2) ? 6 : 2;
             }
             add_score(0);                  /* 20 */
         }
-        /* hit==0: Loch -> Schuss fliegt weiter */
+        /* hit==0: hole -> shot flies on */
     }
     if (g.eleft < 0 && g.flag_boomt <= 0 && g.flag_outro <= 0)
         { g.state = ST_MISSION_CLEAR; g.statetimer = 120; }
 }
 
 /* ===================================================================== */
-/*  Spieler und Schuss ($838C / $8423 / $8486)                           */
+/*  Player and shot ($838C / $8423 / $8486)                              */
 /* ===================================================================== */
 
 static const int ymin_tab[4] = { 0xCB, 0x78, 0xA8, 0xA8 };
@@ -1982,9 +1982,9 @@ static void player_update(void)
     if (g.pdead) { sprite_off(SP_PLAYER); return; }
 
     if (g.mission == 1) {
-        /* Blitter-Schiff: 1 MC-Pixel X, 2/-1 Pixel Y ($83F8).
-         * Nur bei Bewegung: alte Position loeschen, verschieben, neu
-         * zeichnen - sonst bleibt das Schiff stehen (kein Schmieren). */
+        /* Blitter ship: 1 MC pixel X, 2/-1 pixel Y ($83F8).
+         * Only on movement: erase old position, move, redraw -
+         * otherwise the ship stays put (no smearing). */
         int nx = g.bx, ny = g.by;
         if (g.in_left)  --nx;
         if (g.in_right) ++nx;
@@ -1993,9 +1993,9 @@ static void player_update(void)
         if (nx < 4 || nx >= 0x94 - 16) nx = g.bx;
         if (ny < 0x78 || ny >= 0xA9)   ny = g.by;
         if (nx != g.bx || ny != g.by) {
-            laser_draw_player(1);        /* alte Position loeschen */
+            laser_draw_player(1);        /* erase old position */
             g.bx = nx; g.by = ny;
-            laser_draw_player(0);        /* neue Position zeichnen */
+            laser_draw_player(0);        /* draw new position */
         }
     } else {
         if (g.in_left)  g.px -= 2;
@@ -2007,14 +2007,14 @@ static void player_update(void)
         if (g.py < ymin_tab[g.mission]) g.py = ymin_tab[g.mission];
         if (g.py > 0xDF) g.py = 0xDF;
         set_sprite(SP_PLAYER, BLK_PLAYER, g.px, g.py,
-                   mis_spcol[g.mission][SP_PLAYER], 1);  /* $826A: Rot in M1, sonst pro Mission */
-        vic.spyexp = (unsigned short)(vic.spyexp | 1);   /* $D017 Bit 0 */
+                   mis_spcol[g.mission][SP_PLAYER], 1);  /* $826A: red in M1, else per mission */
+        vic.spyexp = (unsigned short)(vic.spyexp | 1);   /* $D017 bit 0 */
     }
 }
 
 static void shot_update(void)
 {
-    /* Ausloesen ($8423): nur bei frischem Druck; setzt vorhandenen zurueck */
+    /* Trigger ($8423): only on a fresh press; resets an existing one */
     if (g.fire_edge && !g.pdead && g.state == ST_PLAY) {
         if (g.mission == 1) {
             if (g.shot == 1) shape_blit(0x1E, g.shotx, g.shoty, 8, 1, 1);
@@ -2031,11 +2031,11 @@ static void shot_update(void)
     }
 
     if (g.shot == 2) {
-        g.shoty -= 3;                     /* $9AEB: 3 px je Bild */
+        g.shoty -= 3;                     /* $9AEB: 3 px/frame */
         if (g.shoty < 0x1D) { g.shot = -1; sprite_off(SP_SHOT); }
         else set_sprite(SP_SHOT, BLK_SHOT, g.shotx, g.shoty, 1, 0);
     } else if (g.shot == 1) {
-        if (g.frame & 1) return;          /* nur jedes zweite Bild */
+        if (g.frame & 1) return;          /* only every 2nd frame */
         shape_blit(0x1E, g.shotx, g.shoty, 8, 1, 1);
         g.shoty -= 8;
         if (g.shoty < 8) g.shot = -1;
@@ -2044,15 +2044,15 @@ static void shot_update(void)
 }
 
 /* ===================================================================== */
-/*  Rahmen                                                               */
+/*  Frame                                                                */
 /* ===================================================================== */
 
 void game_start_mission(void)
 {
     int c;
     g.pop_t[0] = g.pop_t[1] = 0;
-    vic_shake_x = vic_shake_y = 0;        /* falls Titel mitten im Shake endet */
-    sound_wind(0);                        /* Titel-Wind aus */
+    vic_shake_x = vic_shake_y = 0;        /* if title screen ends mid-shake */
+    sound_wind(0);                        /* title wind off */
     vic.mode   = mis_mode[g.mission];
     vic.border = mis_border[g.mission];
     vic.bg     = mis_bg[g.mission];
@@ -2061,8 +2061,8 @@ void game_start_mission(void)
     vic.spmc0  = 7;
     vic.spmc1  = 2;
     for (c = 0; c < NUM_SPRITES; ++c) {
-        /* Missions-Farbtabellen decken die 8 Original-Sprites ab;
-         * die zusaetzlichen (8-15) starten weiss */
+        /* Mission color tables cover the 8 original sprites;
+         * the extra ones (8-15) start white */
         vic.spcol[c] = (c < 8) ? mis_spcol[g.mission][c] : 1;
         sprite_off(c);
     }
@@ -2071,15 +2071,15 @@ void game_start_mission(void)
     if (vic.mode == VIC_MODE_TEXT) {
         memset(vic.screen, CH_EMPTY, VIC_SCREEN_SZ);
         memset(vic.color,  1, VIC_SCREEN_SZ);
-        memset(vic.color,        0x0F, VIC_COLS);         /* Kopfzeile  */
-        memset(vic.color + 960,  0x0F, VIC_COLS);         /* Fusszeile  */
+        memset(vic.color,        0x0F, VIC_COLS);         /* header  */
+        memset(vic.color + 960,  0x0F, VIC_COLS);         /* footer  */
     }
 
     g.px = 0xAA; g.py = 0xDA;             /* $9FA9/$9FAE */
     g.pdead = 0;
     g.shot = -1;
     g.boomtimer = 0;
-    g.fade = 256;                         /* volle Helligkeit */
+    g.fade = 256;                         /* full brightness */
     g.flag_outro = 0;
     ++g.level;
 
@@ -2097,10 +2097,10 @@ void game_start_mission(void)
 
 void game_init(void)
 {
-    long hs = g.hiscore;                  /* Hiscore ueberlebt den Reset */
+    long hs = g.hiscore;                  /* hiscore survives the reset */
     memset(&g, 0, sizeof(g));
     g.hiscore = hs;
-    sound_wind(0);                        /* Taste 5 mitten im Orbit */
+    sound_wind(0);                        /* key 5 mid-orbit */
     vic_reset();
     shape_init();
     memcpy(vic.charset, gd_font, sizeof(vic.charset));
@@ -2110,22 +2110,22 @@ void game_init(void)
     g.state = ST_TITLE;
     vic.mode = VIC_MODE_TEXT;
     vic.bg = 0; vic.border = 0;
-    vic.bg1 = 7; vic.bg2 = 7;   /* Titel: MC-Statuszeilen + Sterne GELB */
+    vic.bg1 = 7; vic.bg2 = 7;   /* title: MC status rows + stars YELLOW */
     memset(vic.screen, CH_EMPTY, VIC_SCREEN_SZ);
     memset(vic.color, 1, VIC_SCREEN_SZ);
 }
 
-/* Rueckkehr aus dem Attract-Mode: Titel startet HINTER allen Einmal-
- * Events (Typewriter fertig, keine Explosion, keine Sprachausgabe) -
- * Text steht, Roboter kreist, Starfield dreht weiter */
+/* Return from attract mode: title starts BEHIND all one-shot
+ * events (typewriter done, no explosion, no speech) -
+ * text is up, robot circles, starfield keeps turning */
 void game_title_return(void)
 {
     game_init();
     g.statetimer = 750;
 }
 
-/* Attract-Mode: startet nach Titel-Inaktivitaet; einfacher Autopilot
- * spielt ohne Wertung, jede Taste fuehrt zurueck (main.c) */
+/* Attract mode: starts after title inactivity; a simple autopilot
+ * plays without scoring, any key returns (main.c) */
 static void demo_start(void)
 {
     long hs = g.hiscore;
@@ -2134,8 +2134,8 @@ static void demo_start(void)
     g.lives = 5;
     g.shot = -1;
     g.demo = 1;
-    /* 50/50 Astro/Warp: strikt abwechselnd (rnd waere im Attract-Loop
-     * deterministisch und blieb praktisch immer bei Astro haengen) */
+    /* 50/50 Astro/Warp: strictly alternating (rnd in the attract
+     * loop would be deterministic and always stuck on Astro) */
     {
         static int demo_alt;
         demo_alt ^= 1;
@@ -2151,12 +2151,12 @@ static void demo_ai(void)
     g.in_fire = 0; g.fire_edge = 0;
     if (g.state != ST_PLAY || g.pdead) return;
     if (g.mission == 0) {
-        /* Ziel HALTEN bis es tot ist (sonst Flipflop zwischen gleich
-         * nahen Aliens = Gezitter); Zellmitte des Paars anpeilen mit
-         * Vorhalt in Marschrichtung (Formation lauft waehrend der
-         * Schuss fliegt) - Trefferfenster ist ex/ex+1, je 8px */
+        /* HOLD the target until it is dead (else flipflop between
+         * equally near aliens = jitter); aim at the cell center
+         * of the pair with lead in march direction (formation moves
+         * while the shot flies) - hit window is ex/ex+1, 8px each */
         static int tgt = -1;
-        for (i = 0; i < 2; ++i)               /* Bombe ueber uns: ausweichen */
+        for (i = 0; i < 2; ++i)               /* bomb above us: dodge */
             if (g.bomb_on[i] && g.bomby[i] > 150) {
                 d = g.bombx[i] - g.px;
                 if (d > -20 && d < 20) {
@@ -2174,10 +2174,10 @@ static void demo_ai(void)
                 if (d < best) { best = d; tgt = i; }
             }
         if (tgt >= 0) {
-            /* Wohin marschiert das Ziel, bis der Schuss oben ankommt?
-             * Flugzeit (3px/Frame) -> Marschschritte (1 Zelle je
-             * stepdelay, naechster in steptimer) -> kuenftige Spalte,
-             * an den Wendekanten (1/0x25) reflektiert */
+            /* Where does the target march to until the shot arrives up top?
+             * flight time (3px/frame) -> march steps (1 cell per
+             * stepdelay, next in steptimer) -> future column,
+             * reflected at the turn edges (1/0x25) */
             int fut = g.ex[tgt], sx = g.px + 12;
             if (g.matdone) {
                 int fly = (g.py - 7 - (50 + (g.ey[tgt] + 1) * 8)) / 3;
@@ -2190,8 +2190,8 @@ static void demo_ai(void)
                 if (fut < 1)  fut = 1;
                 if (fut > 37) fut = 37;
             }
-            /* Trefferfenster = Zellen fut/fut+1 (16px); feuern nur mit
-             * 2px Sicherheitsrand DARIN - nie mehr in die Luecke */
+            /* hit window = cells fut/fut+1 (16px); fire only with
+             * 2px safety margin INSIDE - never in the gap again */
             d = (24 + fut * 8 + 8) - sx;
             if (d < -3)     g.in_left = 1;
             else if (d > 3) g.in_right = 1;
@@ -2199,10 +2199,10 @@ static void demo_ai(void)
                 sx >= 24 + fut * 8 + 2 && sx <= 24 + fut * 8 + 13)
                 { g.in_fire = 1; g.fire_edge = 1; }
         }
-    } else if (g.mission == 2) {              /* Space Warp: NUR ausweichen
-                                               * und Objekt abschiessen */
-        /* Ausweichen mit FESTER Richtung bis die Gefahr vorbei ist
-         * (sonst Flipflop rein/raus = komische Moves) */
+    } else if (g.mission == 2) {              /* Space Warp: ONLY dodge
+                                               * and shoot the object */
+        /* Dodge in a FIXED direction until the danger has passed
+         * (else flipflop in/out = odd moves) */
         static int dodge;
         int threat = 0;
         for (i = 0; i < 4; ++i)
@@ -2217,13 +2217,13 @@ static void demo_ai(void)
         if (g.wobj_on) {
             int dyw = g.py - g.wobj_y;
             d = g.wobj_x - g.px;
-            if (dyw < 48 && d > -40 && d < 40) {   /* Objekt kommt runter */
+            if (dyw < 48 && d > -40 && d < 40) {   /* object coming down */
                 threat = 1;
                 if (!dodge) dodge = (d >= 0) ? -1 : 1;
             }
         }
         if (threat) {
-            if (g.px <= 0x24 && dodge < 0) dodge = 1;    /* Feldrand */
+            if (g.px <= 0x24 && dodge < 0) dodge = 1;    /* edge */
             if (g.px >= 0x135 && dodge > 0) dodge = -1;
             if (dodge < 0) g.in_left = 1; else g.in_right = 1;
         } else {
@@ -2232,7 +2232,7 @@ static void demo_ai(void)
                 int dir = 0;
                 d = g.wobj_x - g.px;
                 if (d < -10) dir = -1; else if (d > 10) dir = 1;
-                /* nie in einen anfliegenden Stein hineinlaufen */
+                /* never run into an incoming rock */
                 for (i = 0; dir && i < 4; ++i)
                     if (g.stone_on[i]) {
                         int sdx = g.stone_x[i] - g.px;
@@ -2245,12 +2245,12 @@ static void demo_ai(void)
                 else if (dir > 0) g.in_right = 1;
             }
         }
-        if (g.shot < 0 && g.wobj_on) {            /* feuern unabhaengig
-                                                   * von der Bewegung */
+        if (g.shot < 0 && g.wobj_on) {            /* fire independent
+                                                   * of the movement */
             d = g.wobj_x - g.px;
             if (d > -14 && d < 14) { g.in_fire = 1; g.fire_edge = 1; }
         }
-    } else {                                  /* andere Missionen: pendeln */
+    } else {                                  /* other missions: oscillate */
         if ((g.frame >> 5) & 1) g.in_right = 1; else g.in_left = 1;
         if (g.shot < 0) { g.in_fire = 1; g.fire_edge = 1; }
     }
@@ -2263,35 +2263,35 @@ void game_frame(void)
         demo_ai();
         if (++g.demot > 1700) { game_title_return(); return; }
     }
-    g.tw_n = 0;                           /* Typewriter-Alpha je Frame neu */
-    if (g.state != ST_BOOT && g.bootzoom > 0) {   /* Boot-Crossfade-Rest */
+    g.tw_n = 0;                           /* typewriter alpha per frame */
+    if (g.state != ST_BOOT && g.bootzoom > 0) {   /* boot crossfade rest */
         ++g.bootzoom;
         if (g.bootzoom > 190) g.bootzoom = 0;
     }
     if (g.glitcht > 0) --g.glitcht;
 
     switch (g.state) {
-    case ST_CREDITS:                      /* Bild malt credits_render (main.c) */
+    case ST_CREDITS:                      /* credits_render draws it (main.c) */
         ++g.statetimer;
-        if (g.statetimer == 60) sound_play(SND_CREDBOOM);   /* Logo entsteht */
+        if (g.statetimer == 60) sound_play(SND_CREDBOOM);   /* logo forms */
         return;
     case ST_BOOT:
         ++g.statetimer;
         if (g.bootzoom == 0) {
-            /* Tastatur-Klack je getipptem Zeichen (18 Anschlaege) */
+            /* keyboard clack per typed character (18 keystrokes) */
             if (g.statetimer >= 50 && g.statetimer < 50 + 18 * 4 &&
                 ((g.statetimer - 50) & 3) == 0)
                 sound_play(SND_KEY);
             g.fade = (g.statetimer * 6 > 256) ? 256 : g.statetimer * 6;
             if (g.fire_edge && g.statetimer > 30) {
                 g.bootzoom = 1;
-                sound_play(SND_TAKEOVER);   /* leiser Uebergangs-Sound */
+                sound_play(SND_TAKEOVER);   /* quiet transition sound */
             }
         } else {
             ++g.bootzoom;
-            g.fade = 256;                 /* Helligkeit macht der Crossfade */
-            if (g.bootzoom >= 20) {       /* frueh in den Titel wechseln -
-                                           * Boot blendet als Overlay aus */
+            g.fade = 256;                 /* crossfade handles brightness */
+            if (g.bootzoom >= 20) {       /* switch to title early -
+                                           * boot fades out as overlay */
                 g.state = ST_TITLE;
                 g.statetimer = 0;
                 g.fade = 0;
@@ -2313,7 +2313,7 @@ void game_frame(void)
     case ST_MISSION_INTRO:
         if (--g.statetimer <= 0) {
             g.state = ST_PLAY;
-            /* Missionsname wieder entfernen */
+            /* Remove mission name again */
             if (vic.mode == VIC_MODE_TEXT) {
                 int c;
                 for (c = 0; c < VIC_COLS; ++c)
@@ -2329,9 +2329,9 @@ void game_frame(void)
     case ST_PLAYER_HIT:
         boom_update();
         if (g.mission == 1) laser_booms();
-        if (g.mission == 3) flag_bigboom();   /* Explosion laeuft weiter */
+        if (g.mission == 3) flag_bigboom();   /* Explosion keeps running */
         if (--g.statetimer <= 0) {
-            /* Demo verliert keine Leben (endlos bis zum Timeout) */
+            /* Demo loses no lives (endless until timeout) */
             if (!g.demo && --g.lives <= 0)
                 { g.state = ST_GAME_OVER; g.statetimer = 250; }
             else {
@@ -2342,7 +2342,7 @@ void game_frame(void)
                     bitmap_clear();
                     stars_bitmap_all();
                     g.laser_on[0] = g.laser_on[1] = 0;
-                    laser_draw_static();     /* Kanonen + Schiff neu zeichnen */
+                    laser_draw_static();     /* Redraw cannons + ship */
                 }
                 g.state = ST_PLAY;
             }
@@ -2357,10 +2357,10 @@ void game_frame(void)
             if (g.mission >= NUM_MISSIONS) {
                 g.mission = 0;
                 if (g.rank < MAX_RANK) ++g.rank;
-                if (g.rank == 1 && g.lives < 6) ++g.lives;   /* Extraleben $9009 */
+                if (g.rank == 1 && g.lives < 6) ++g.lives;   /* Extra life $9009 */
             }
             game_start_mission();
-            /* Fallback (Debug-Taste N o.ae.): Glitch lief noch nicht an */
+            /* Fallback (debug key N etc.): glitch had not started yet */
             if (wasflag && g.glitcht <= 0) {
                 g.glitcht = 62;
                 sound_play(SND_GLITCH);
@@ -2396,7 +2396,7 @@ void game_draw(void)
         memset(vic.screen, CH_EMPTY, VIC_SCREEN_SZ);
         memset(vic.color, 1, VIC_SCREEN_SZ);
         vic.spenable = 0;
-        return;                           /* Bild malt boot/credits (main.c) */
+        return;                           /* boot/credits paints it (main.c) */
     }
     if (g.state == ST_TITLE) {
         int i;
@@ -2404,52 +2404,52 @@ void game_draw(void)
         vic.bg = 0; vic.border = 0;
         memset(vic.screen, CH_EMPTY, VIC_SCREEN_SZ);
         memset(vic.color, 1, VIC_SCREEN_SZ);
-        status_lines();                   /* Titel = MS:00 (wie Original) */
+        status_lines();                   /* Title = MS:00 (as original) */
         {
-            /* Erst ~4s langsames Einfaden (nur Sterne + Status), DANN
-             * geht das Intro los - alles um 200 Frames verschoben */
+            /* First ~4s slow fade in (only stars + status), THEN
+             * the intro starts - everything shifted by 200 frames */
             int st = g.statetimer - 200;
-            int t = st - 180;             /* Logo-Animation startet nach Intro */
+            int t = st - 180;             /* Logo animation starts after intro */
             vic.spenable = 0;
-            /* Sterne kommen als rotierendes Pixel-Starfield (Post-Pass
-             * title_starfield), nicht mehr aus der Matrix */
-            /* quadratische Kurve: bleibt lange dunkel, zieht hinten an */
+            /* Stars come as a rotating pixel starfield (post-pass
+             * title_starfield), no longer from the matrix */
+            /* quadratic curve: stays dark long, picks up at the end */
             g.fade = g.statetimer * g.statetimer / 156;
             if (g.fade > 256) g.fade = 256;
-            /* Intro-Typewriter (Nutzerwunsch): Praesentationszeile UEBER
-             * dem Logo, tippt mit leisen Ticks und BLEIBT stehen */
+            /* Intro typewriter (user request): presentation line ABOVE
+             * the logo, types with quiet ticks and STAYS put */
             {
-                /* Zeichen-Zeitplan LIPPENSYNCHRON zum presents-Sample
-                 * (Huellkurve: Wortgrenzen Frame 37/78, Ende 122) */
+                /* Character schedule LIP-SYNCED to presents sample
+                 * (envelope: word bounds frame 37/78, end 122) */
                 static const char *pl = "SYNTHETIC DEVELOPMENT PRESENTS";
                 static const unsigned short pct[30] = {
                      28, 31, 34, 38, 41, 44, 48, 51, 54, 62,
                      62, 65, 68, 72, 75, 78, 82, 85, 88, 92,
                      95,103,103,108,114,119,125,130,136,141 };
                 int shown = 0;
-                if (st == 25) sound_play(SND_PRESENTS);   /* Sprachsample */
+                if (st == 25) sound_play(SND_PRESENTS);   /* speech clip */
                 for (i = 0; i < 30; ++i) {
                     int age, col;
                     if (st < (int)pct[i]) break;
                     shown = i + 1;
                     age = st - (int)pct[i];
-                    /* stufenlos: weiss zeichnen, RGB-Alpha via Overlay */
+                    /* stepless: draw white, RGB alpha via overlay */
                     col = 1;
                     mat_put(5 + i, 5, char_hires(pl[i]), col, 1);
                     tw_push(5 + i, 5, age * 256 / 10);
                 }
-                if (st >= 25 && st < 175) {   /* Cursor pulst per RGB-Alpha */
+                if (st >= 25 && st < 175) {   /* Cursor pulses by RGB-alpha */
                     int p2 = st % 24, tri = (p2 < 12) ? p2 : 23 - p2;
                     mat_put(5 + shown, 5, 0x60, 1, 1);
                     tw_push(5 + shown, 5, tri * 256 / 11);
                 }
             }
-            /* Start-Animation wie Original (Longplay t005-t081, ohne (C)-
-             * Zeilen): Buchstaben nacheinander, Roboter kommt oben links
-             * herunter und wippt dann neben dem Logo. */
+            /* Start animation like original (longplay t005-t081, no (C)
+             * lines): letters one by one, robot descends from top left
+             * and then bobs next to the logo. */
             if (t >= 0) {
-                /* PUSH THE SPACE BUTTON: Typewriter mit Tastatur-Klack,
-                 * startet erst NACH der GORPH-Stimme (t=210) */
+                /* PUSH THE SPACE BUTTON: typewriter with key clack,
+                 * starts only AFTER the GORPH voice (t=210) */
                 static const char *pb = "PUSH THE SPACE BUTTON";
                 int shown2 = (t < 210) ? 0 : (t - 210) / 4;
                 if (shown2 > 21) shown2 = 21;
@@ -2466,40 +2466,40 @@ void game_draw(void)
                     mat_put(9 + shown2, 17, 0x60, 1, 1);
                     tw_push(9 + shown2, 17, ca);
                 }
-                /* dezenter Hinweis unten rechts: C = CREDITS (blendet nach
-                 * dem PUSH-Text ein, bleibt gedimmt) */
+                /* subtle hint bottom right: C = CREDITS (fades in after
+                 * the PUSH text, stays dimmed) */
                 if (t >= 300) {
                     static const char *pc2 = "C = CREDITS";
-                    int p = (t - 300) % 128;            /* Puls 2.5 s */
+                    int p = (t - 300) % 128;            /* pulse 2.5s */
                     int a = 12 + ((p < 64) ? p : 127 - p) * 2;   /* 12..138 */
-                    if (a > (t - 300) * 8) a = (t - 300) * 8;   /* Einblenden */
-                    for (i = 0; pc2[i]; ++i) {   /* unten Mitte, Zeile 22 */
+                    if (a > (t - 300) * 8) a = (t - 300) * 8;   /* fade in */
+                    for (i = 0; pc2[i]; ++i) {   /* bottom center, row 22 */
                         mat_put(14 + i, 22, char_hires(pc2[i]), 1, 1);
                         tw_push(14 + i, 22, a);
                     }
                 }
-                /* Buchstaben fliegen als WELLE von rechts ein (w003-w053):
-                 * Zug wandert 3px/Frame nach links, schwingt vertikal
-                 * (Sinus +-10px) und rastet auf der Zielposition ein. */
+                /* Letters fly in as a WAVE from the right (w003-w053):
+                 * train moves left 3px/frame, swings vertically
+                 * (sine +-10px) and locks into the target position. */
                 for (i = 0; i < 5; ++i) {
                     static const signed char twave[16] =
                         { 0,4,7,9,10,9,7,4,0,-4,-7,-9,-10,-9,-7,-4 };
-                    /* GORPH: G O R aus dem Original, P/H neu (34/35) */
+                    /* GORPH: G O R from original, P/H new (34/35) */
                     static const int lblk[5] = { 27, 28, 29, 34, 35 };
                     int fx = 68 + i * 48;
                     int x  = 344 + i * 56 - t * 3;
                     int y  = 120;
                     if (x <= fx) x = fx;
                     else y = 120 + twave[(t + i * 4) & 15];
-                    /* Buchstaben auf Sprite 1-5: Sprite 0 bleibt frei fuer
-                     * den Roboter VOR dem Logo (VIC-Prioritaet) */
+                    /* Letters on sprite 1-5: sprite 0 stays free for
+                     * the robot IN FRONT of logo (VIC priority) */
                     set_sprite(1 + i, lblk[i], x, y, 8, 1);
-                    /* Zur GORPH-Stimme (t=151): Buchstaben blitzen nach-
-                     * einander KOMPLETT weiss auf und faden ueber hell-
-                     * grau/grau zur Grundfarbe zurueck */
+                    /* At the GORPH voice (t=151): letters flash one
+                     * after another COMPLETELY white and fade via light
+                     * gray/gray back to the base color */
                     {
-                        /* Huellkurve GORPH.mp3: Einsatz Frame 2, Kern bis
-                         * ~45 -> 5 Blitze im Abstand 8 ab t=153 */
+                        /* Envelope GORPH.mp3: onset frame 2, core up to
+                         * ~45 -> 5 flashes spaced 8 from t=153 */
                         int bt = t - (153 + i * 8);
                         if (bt >= 0 && bt < 10) {
                             sprite_solidify(1 + i);
@@ -2508,13 +2508,13 @@ void game_draw(void)
                         }
                     }
                 }
-                vic.spxexp = 0x3E;        /* Buchstaben doppelt breit */
-                vic.spyexp = 0x3E;        /* Buchstaben doppelt hoch */
-                /* Logo eingerastet (t=103): RUMMS - tiefer Doppel-Rumble,
-                 * abklingender Screenshake (~0.8s), doppelter Weissblitz */
+                vic.spxexp = 0x3E;        /* Letters double width */
+                vic.spyexp = 0x3E;        /* Letters double height */
+                /* Logo locked in (t=103): THUD - deep double rumble,
+                 * decaying screenshake (~0.8s), double white flash */
                 if (t == 103) sound_play(SND_BIGBOOM);
-                if (t == 151) sound_play(SND_GORPHVOICE);   /* "GORPH" nach
-                                                            * dem Shake */
+                if (t == 151) sound_play(SND_GORPHVOICE);   /* "GORPH" after
+                                                            * the shake */
                 if (t >= 103 && t < 151) {
                     int amp = (t < 115) ? 11 : (t < 127) ? 7
                             : (t < 139) ? 4 : 2;
@@ -2524,23 +2524,23 @@ void game_draw(void)
                     vic_shake_x = vic_shake_y = 0;
                 }
                 if ((t >= 103 && t < 106) || (t >= 108 && t < 110))
-                    vic.bg = vic.border = 1;   /* Weissblitz */
-                /* Roboter: von oben einfliegen, dann KREISFOERMIG ums Logo -
-                 * hinten (oben) klein und von den Buchstaben verdeckt,
-                 * vorne (unten) doppelt gross (Nutzerwunsch) */
+                    vic.bg = vic.border = 1;   /* whiteflash */
+                /* Robot: fly in from above, then CIRCLING the logo -
+                 * back (top) small and hidden by the letters,
+                 * front (bottom) double size (user request) */
                 {
                     int rx, ry;
-                    if (t < 70) {             /* Einflug von oben (gross) */
+                    if (t < 70) {             /* Fly-in from top (large) */
                         rx = 42; ry = 50 + t; if (ry > 110) ry = 110;
                         vic.spxexp |= 0x01; vic.spyexp |= 0x01;
                         set_sprite(0, BLK_GORPH, rx, ry, 10, 1);
                         sound_wind(0);
-                    } else {                  /* Orbit ums Logo: interpolierte
-                                               * 1/4-Schritt-Bahn (ruckelfrei),
-                                               * Groesse weich skaliert 24-48px;
-                                               * vorn Sprite 0, hinten Sprite 7,
-                                               * Blur-Schweif gedithert 8+9
-                                               * (kein 8-Sprite-Limit mehr). */
+                    } else {                  /* Logo orbit: interpolated
+                                               * 1/4-step path (judder-free),
+                                               * size smoothly scaled 24-48px;
+                                               * front sprite 0, back sprite 7,
+                                               * blur trail dithered 8+9
+                                               * (no more 8-sprite limit). */
                         int t70 = t - 70, k;
                         vic.spxexp |= 0x0381; vic.spyexp |= 0x0381;
                         for (k = 2; k >= 0; --k) {
@@ -2560,7 +2560,7 @@ void game_draw(void)
                                        rx - w_p * 2, ry - hs, k ? 9 : 10, 1);
                             robot_scaled(spr, w_p, hs);
                             if (k) sprite_dither(spr, k - 1);
-                            /* leiser Wind, vorn etwas praesenter */
+                            /* soft wind, more present up front */
                             else sound_wind(28 + s * 12 / 64);
                         }
                     }
@@ -2587,8 +2587,8 @@ void game_draw(void)
     }
 }
 
-/* Titel-Orbit: Sinus mit 24 Stuetzen, linear interpoliert (q = Phase in
- * Viertelschritten) - fuer ruckelfreie Bahn und weiche Groessenstufen */
+/* Title orbit: sine with 24 nodes, linearly interpolated (q = phase in
+ * quarter steps) - for judder-free path and smooth size steps */
 static const signed char tsin[24] = {
       0, 16, 31, 45, 55, 62, 64, 62, 55, 45, 31, 16,
       0,-16,-31,-45,-55,-62,-64,-62,-55,-45,-31,-16 };
@@ -2600,9 +2600,9 @@ static int tsin_q(int q)
     return a + (b - a) * f / 4;
 }
 
-/* Roboter-Block weich skaliert in die Spritedaten zeichnen: w_p MC-Paare
- * breit (6..12), hs Reihen hoch (10..21); Sprite ist X+Y-expandiert ->
- * Anzeige 24..48 x 20..42 px in feinen Stufen */
+/* Draw robot block smoothly scaled into the sprite data: w_p MC pairs
+ * wide (6..12), hs rows high (10..21); sprite is X+Y-expanded ->
+ * display 24..48 x 20..42 px in fine steps */
 static void robot_scaled(int spr, int w_p, int hs)
 {
     const unsigned char *src = gd_sprites + BLK_GORPH * 64;
@@ -2619,8 +2619,8 @@ static void robot_scaled(int spr, int w_p, int hs)
     memcpy(vic.spdata[spr], d, 64);
 }
 
-/* Feiner Sinus fuer die Starfield-Rotation: Umlauf = 1536 Einheiten
- * (1/16 Viertelschritt) - Randbewegung damit ruckelfrei */
+/* Fine sine for the starfield rotation: lap = 1536 units
+ * (1/16 quarter step) - so edge motion is judder-free */
 static int tsin_f(int w)
 {
     int i, f, a, b;
@@ -2631,16 +2631,16 @@ static int tsin_f(int w)
 }
 
 
-/* Titel-Starfield: rotiert langsam um die linke Achse (0,100), pixel-
- * genau als Post-Pass ins fertige Bild (nur auf Hintergrundpixel ->
- * bleibt hinter Logo/Text); dunkler Nachzieh-Pixel = leichter Blur */
+/* Title starfield: rotates slowly about the left axis (0,100), pixel-
+ * exact as post-pass into final image (only background pixels ->
+ * stays behind logo/text); dark trailing pixel = slight blur */
 static void title_starfield(unsigned char *fr)
 {
-    int i, k, w0 = -(g.statetimer * 2) % 1536;   /* negativ = nach links */
+    int i, k, w0 = -(g.statetimer * 2) % 1536;   /* negative = leftwards */
     for (i = 0; i < 40; ++i) {
         int ph = (i * 197) % 1536;
-        int r  = 20 + (i * i * 13) % 170;        /* um die BILDMITTE */
-        for (k = 1; k >= 0; --k) {        /* k=1: Blur (3 Frames alt) */
+        int r  = 20 + (i * i * 13) % 170;        /* about MID-SCREEN */
+        for (k = 1; k >= 0; --k) {        /* k=1: blur (3 frames old) */
             int w  = w0 + ph + k * 6;
             int sx = 160 + r * tsin_f(w + 384) / 64;
             int sy = 100 + r * tsin_f(w) / 64;
@@ -2653,8 +2653,8 @@ static void title_starfield(unsigned char *fr)
     }
 }
 
-/* Position von Titel-Stern k (0..39) - fuer den nahtlosen Morph in
- * das Credits-Starfield (main.c uebernimmt die Sterne beim C-Druck) */
+/* Position of title star k (0..39) - for the seamless morph into
+ * the credits starfield (main.c takes over the stars on C press) */
 void game_title_star(int k, int *sx, int *sy)
 {
     int w0 = -(g.statetimer * 2) % 1536;
@@ -2665,22 +2665,22 @@ void game_title_star(int k, int *sx, int *sy)
     *sy = 100 + r * tsin_f(w) / 64;
 }
 
-/* Rotierende Explosionsstrahlen (Flagship-Tod): 16 Funkenstrahlen
- * drehen sich als Feuerrad ums Schiffszentrum, wachsen an und werden
- * jeden Frame frisch gezeichnet - nichts bleibt stehen */
+/* Rotating explosion rays (flagship death): 16 spark rays
+ * spin as a firewheel around the ship center, grow and are
+ * redrawn fresh every frame - nothing stays put */
 static void flagboom_fx(unsigned char *fr)
 {
     static const unsigned char bc[4] = { 7, 2, 10, 1 };
     int d, s, e = 240 - g.flag_boomt;
     int cx = g.flag_bx * 8 + 4, cy = g.flag_by * 8 + 4;
     int len = e * 3;
-    /* Rotation beschleunigt beim Finale - das Rad DREHT sich raus */
+    /* Rotation accelerates at the finale - the wheel SPINS out */
     int rot = e * 6 + ((e > 180) ? (e - 180) * (e - 180) / 6 : 0);
     int r0  = (e > 180) ? (e - 180) * 8 : 0;
     if (len > 260) len = 260;
     for (d = 0; d < 16; ++d) {
         for (s = 8 + r0; s < len + r0; s += 5 + (d & 3)) {
-            /* Winkel hinkt mit dem Radius nach -> Spiralarme */
+            /* Angle lags with the radius -> spiral arms */
             int w = rot + d * 96 - s / 2;
             int x = cx + tsin_f(w + 384) * s / 64;
             int y = cy + tsin_f(w) * s / 64;
@@ -2688,8 +2688,8 @@ static void flagboom_fx(unsigned char *fr)
             fr[y * VIC_W + x] = bc[(d + (s >> 4)) & 3];
         }
     }
-    /* Funkenburst: ab dem Knall fliegen einzelne Pixel radial mit
-     * unterschiedlichen Geschwindigkeiten raus (zwei Wellen) */
+    /* Spark burst: from the bang single pixels fly radially at
+     * different speeds outward (two waves) */
     for (d = 0; d < 96; ++d) {
         int e0 = (d < 48) ? 0 : 40;
         int w0, v, r, x, y;
@@ -2704,8 +2704,8 @@ static void flagboom_fx(unsigned char *fr)
     }
 }
 
-/* Schutzschirm-Schrott: die Bogenzellen rieseln als rote Pixel runter,
- * mit Motion-Blur-Nachzieher, und faden dann aus */
+/* Shield debris: the arc cells trickle down as red pixels,
+ * with motion-blur trail, then fade out */
 static void outro_arcfall(unsigned char *fr)
 {
     int i, e = 422 - g.flag_outro;
@@ -2718,13 +2718,13 @@ static void outro_arcfall(unsigned char *fr)
             if (x + 1 < VIC_W) fr[y * VIC_W + x + 1] = col;
         }
         if (e < 90 && yb >= 8 && yb < 192 && fr[yb * VIC_W + x] == 0)
-            fr[yb * VIC_W + x] = 11;      /* Blur-Nachzieher */
+            fr[yb * VIC_W + x] = 11;      /* blur trail */
     }
 }
 
-/* Finale-Starfield (Outro Mission 4): die Explosion versetzt das
- * Sternenfeld in eine kurze, abklingende Rotation; dazu sinken die
- * Sterne individuell nach unten weg */
+/* Finale starfield (outro mission 4): the explosion puts the
+ * starfield into a short, decaying rotation; the stars also
+ * sink away downward individually */
 static void outro_starfield(unsigned char *fr)
 {
     int i, e = 422 - g.flag_outro;
@@ -2742,24 +2742,24 @@ static void outro_starfield(unsigned char *fr)
     }
 }
 
-/* TV-Glitch-Uebergang nach Mission 4 (Nutzerwunsch, Referenz: dunkles
- * VHS-Static-Video): das neue Level schiebt sich von unten ins Bild
- * (fertig nach 40 Frames), dazu Zeilen-Risse, Stoerbalken und Speckle-
- * Rauschen, das mit dem Glitch-Sample (~1.2s) abklingt. Wirkt auf das
- * fertig gerenderte Indexbild, nach vic_render. */
+/* TV glitch transition after mission 4 (user request, reference: dark
+ * VHS static video): the new level pushes into the frame
+ * from below (done after 40 frames), plus line tears, noise bars and
+ * speckle noise that decays with the glitch sample (~1.2s). Acts on
+ * the fully rendered index image, after vic_render. */
 void game_glitch(unsigned char *fr)
 {
     int e, off, i, n;
-    if (g.state == ST_TITLE) title_starfield(fr);   /* Titel-Post-Pass */
+    if (g.state == ST_TITLE) title_starfield(fr);   /* Title post-pass */
     else if (g.mission == 3 && g.flag_boomt > 0)
-        flagboom_fx(fr);                            /* Explosions-Feuerrad */
+        flagboom_fx(fr);                            /* Explosion firewheel */
     else if (g.state == ST_PLAY && g.mission == 3 && g.flag_outro > 0) {
-        outro_starfield(fr);                        /* Finale-Post-Pass */
+        outro_starfield(fr);                        /* Finale post-pass */
         outro_arcfall(fr);
     }
     if (g.glitcht <= 0) return;
-    if (g.glitcht > 62) {                 /* Phase A: altes Bild ROLLT
-                                           * vertikal durch, mit Zitter */
+    if (g.glitcht > 62) {                 /* Phase A: old image ROLLS
+                                           * vertically, with jitter */
         static unsigned char tmp[VIC_W * VIC_H];
         int ea = 124 - g.glitcht;
         int roff = (ea * 7 + rnd(16)) % VIC_H;
@@ -2768,20 +2768,20 @@ void game_glitch(unsigned char *fr)
             memcpy(fr, tmp + roff * VIC_W, (VIC_H - roff) * VIC_W);
             memcpy(fr + (VIC_H - roff) * VIC_W, tmp, roff * VIC_W);
         }
-    } else {                              /* Phase B: neues Level schiebt
-                                           * sich von unten ins Bild */
+    } else {                              /* Phase B: new level pushes
+                                           * into frame from below */
         e = 62 - g.glitcht;
         off = 200 - e * 5;
-        if (g.glitcht > 20) off += rnd(9) - 4;   /* V-Hold-Zittern */
+        if (g.glitcht > 20) off += rnd(9) - 4;   /* V-hold jitter */
         if (off < 0) off = 0;
-        if (off >= VIC_H) {                      /* ganz unten: alles schwarz */
+        if (off >= VIC_H) {                      /* at the bottom: all black */
             memset(fr, 0, VIC_W * VIC_H);
         } else if (off > 0) {
             memmove(fr + off * VIC_W, fr, (VIC_H - off) * VIC_W);
             memset(fr, 0, off * VIC_W);
         }
     }
-    n = (g.glitcht > 62) ? 8 : (g.glitcht > 20) ? 5 : 2;   /* Zeilen-Risse */
+    n = (g.glitcht > 62) ? 8 : (g.glitcht > 20) ? 5 : 2;   /* line tears */
     for (i = 0; i < n; ++i) {
         int y = rnd(VIC_H - 6), h = 1 + rnd(5), dx = rnd(61) - 30, r, x;
         unsigned char row[VIC_W];
@@ -2791,12 +2791,12 @@ void game_glitch(unsigned char *fr)
                 fr[r * VIC_W + x] = row[(x + dx + VIC_W) % VIC_W];
         }
     }
-    if (g.glitcht > 16 && rnd(2) == 0) {  /* schwarze Stoerbalken */
+    if (g.glitcht > 16 && rnd(2) == 0) {  /* black noise bars */
         int y = rnd(VIC_H - 8), h = 2 + rnd(5);
         memset(fr + y * VIC_W, 0, h * VIC_W);
     }
-    /* Flatter-Schneebaender (Referenzvideo 0:37): dicke horizontale
-     * Wolken aus kurzen Schneestreifen, springen jedes Bild */
+    /* Flutter snow bands (reference video 0:37): thick horizontal
+     * clouds of short snow streaks, jumping every frame */
     n = (g.glitcht > 16) ? 3 + rnd(3) : 1;
     for (i = 0; i < n; ++i) {
         static const unsigned char spk[8] = { 1, 1, 15, 15, 12, 12, 11, 0 };
@@ -2814,7 +2814,7 @@ void game_glitch(unsigned char *fr)
             }
         }
     }
-    n = 40 + g.glitcht * 2;               /* Rest-Speckle ueberall */
+    n = 40 + g.glitcht * 2;               /* rest speckle all over */
     for (i = 0; i < n; ++i) {
         static const unsigned char spk[4] = { 1, 15, 12, 11 };
         int x = rnd(VIC_W - 1), y = rnd(VIC_H);

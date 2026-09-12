@@ -1,5 +1,5 @@
-/* robotimg.h - roter Gorph-Robot (Nutzer-PNG, auf C64-Palette
- * quantisiert, 0xFF = transparent). Automatisch erzeugt. */
+/* robotimg.h - red Gorph robot (user PNG, quantized to C64
+ * palette, 0xFF = transparent). Auto-generated. */
 #ifndef ROBOTIMG_H
 #define ROBOTIMG_H
 

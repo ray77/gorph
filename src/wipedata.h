@@ -1,7 +1,7 @@
-/* wipedata.h - Wischgeraeusch-TEXTUR fuer den Schwammarm: granular aus
- * den lauten Teilen von wipe.mp3 gebaut (40-ms-Koerner, zufaellig
- * ueberlagert, Pegel per AGC geglaettet, 100 ms Crossfade zum nahtlosen
- * Loop) - gleichmaessiges Rauschen ohne Pulsieren. 8-Bit mono 22050. */
+/* wipedata.h - wipe noise TEXTURE for the sponge arm: built granular
+ * from the loud parts of wipe.mp3 (40 ms grains, randomly overlaid,
+ * level smoothed by AGC, 100 ms crossfade for a seamless loop) -
+ * even noise without pulsing. 8-bit mono 22050. */
 #ifndef WIPEDATA_H
 #define WIPEDATA_H
 #define WIPE_LEN 41895L

@@ -3,10 +3,10 @@
 
 Vic vic;
 
-/* C64-Palette nach Pepto */
+/* C64 palette per Pepto */
 const unsigned long vic_palette[16] = {
     0x000000UL, 0xFFFFFFUL, 0x68372BUL, 0x70A4B2UL,
-    0x6F3D86UL, 0x588D43UL, 0x4443ABUL, 0xB8C76FUL,   /* Blau: echtes Gorph-Blau (Nutzer-Muster) */
+    0x6F3D86UL, 0x588D43UL, 0x4443ABUL, 0xB8C76FUL,   /* Blue: real Gorph blue (user sample) */
     0x6F4F25UL, 0x433900UL, 0x9A6759UL, 0x444444UL,
     0x6C6C6CUL, 0x9AD284UL, 0x6C5EB5UL, 0x959595UL
 };
@@ -18,7 +18,7 @@ void vic_reset(void)
     vic.spmc1 = 2;
 }
 
-/* Multicolor-Bitmap: Bitpaare waehlen bg / screen-hi / screen-lo / colorram */
+/* Multicolor bitmap: bit pairs select bg / screen-hi / screen-lo / colorram */
 static void render_bitmap(unsigned char *out)
 {
     int cx, cy, ry, p;
@@ -43,8 +43,8 @@ static void render_bitmap(unsigned char *out)
     }
 }
 
-/* Multicolor-Textmodus: Farbnibble unter 8 -> Hires-Zeichen in dieser
- * Farbe; ab 8 -> Multicolor mit $D021/$D022/$D023/Farbe&7 */
+/* Multicolor text mode: color nibble under 8 -> hires char in this
+ * color; 8+ -> multicolor with $D021/$D022/$D023/color&7 */
 static void render_text(unsigned char *out)
 {
     int cx, cy, ry, p;
@@ -58,8 +58,8 @@ static void render_text(unsigned char *out)
             for (ry = 0; ry < 8; ++ry) {
                 unsigned char b = gl[ry];
                 unsigned char *dst = out + (cy * 8 + ry) * VIC_W + cx * 8;
-                /* Bit 4 (0x10) erzwingt Hires auch bei Farbe >= 8 -
-                 * fuer Graustufen-Text (Typewriter-Fade) */
+                /* Bit 4 (0x10) forces hires even for color >= 8 -
+                 * for grayscale text (typewriter fade) */
                 if ((col & 8) && !(raw & 0x10)) {
                     for (p = 0; p < 4; ++p) {
                         unsigned char v = (unsigned char)((b >> (6 - p * 2)) & 3);
@@ -123,8 +123,8 @@ static void render_sprite(unsigned char *out, int i)
     }
 }
 
-/* Ist Sprite-Pixel (px,py relativ zur Ecke, in Geraetepixeln) gesetzt?
- * Multicolor: Bitpaar 01 zaehlt fuer Kollisionen nicht. */
+/* Is sprite pixel (px,py relative to corner, in device pixels) set?
+ * Multicolor: bit pair 01 never counts for collisions. */
 static int sprite_solid(int i, int px, int py)
 {
     int xe = ((vic.spxexp >> i) & 1) ? 2 : 1;
@@ -137,14 +137,14 @@ static int sprite_solid(int i, int px, int py)
     b = vic.spdata[i][row * 3 + (px >> 3)];
     if ((vic.spmulti >> i) & 1) {
         int pair = (b >> (6 - ((px >> 1) & 3) * 2)) & 3;
-        return pair != 0;    /* alle sichtbaren Paare kollidieren (auch %01) */
+        return pair != 0;    /* all visible pairs collide (including %01) */
     }
     return (b >> (7 - (px & 7))) & 1;
 }
 
-/* Vordergrundpixel der Anzeige an Bildschirmposition (0..319, 0..199)?
- * Textmodus: Hires-Zeichen (Farbnibble < 8) kollidieren mit jedem Bit,
- * Multicolor-Zeichen nur mit den Paaren 10/11.  Bitmap: Paare 10/11. */
+/* Foreground pixel of the display at screen position (0..319, 0..199)?
+ * Text mode: hires chars (color nibble < 8) collide with every bit,
+ * Multicolor characters only with pairs 10/11.  Bitmap: pairs 10/11. */
 static int bg_solid(int x, int y)
 {
     int cell, b;
@@ -161,8 +161,8 @@ static int bg_solid(int x, int y)
     return ((b >> (6 - ((x >> 1) & 3) * 2)) & 3) >= 2;
 }
 
-/* Wie sprite_solid, aber HW-treu: MC-Paar %01 ist fuer Kollisionen
- * transparent (VIC-II $D01E-Verhalten). */
+/* Like sprite_solid, but HW-true: MC pair %01 is for collisions
+ * transparent (VIC-II $D01E behavior). */
 static int sprite_solid_hw(int i, int px, int py)
 {
     int xe = ((vic.spxexp >> i) & 1) ? 2 : 1;
@@ -178,7 +178,7 @@ static int sprite_solid_hw(int i, int px, int py)
     return (b >> (7 - (px & 7))) & 1;
 }
 
-/* Sprite-Sprite-Kollision wie die VIC-Hardware ($D01E): %01 zaehlt nicht */
+/* Sprite-sprite collision as in VIC hardware ($D01E): %01 does not count */
 int vic_sprites_overlap_hw(int a, int b)
 {
     int ax0 = vic.spx[a] - 24, ay0 = vic.spy[a] - 50;
@@ -223,9 +223,9 @@ int vic_sprites_overlap(int a, int b)
     return 0;
 }
 
-/* Beruehrt Sprite i pixelgenau eine Textzelle mit Code in [lo,hi]?
- * (Gate wie $D01F, Zellauswahl macht der Aufrufer wie $956B ueber
- * die Sprite-Ecke.) */
+/* Does sprite i pixel-exact hit a text cell with code in [lo,hi]?
+ * (Gate like $D01F, cell choice by the caller as at $956B via
+ * the sprite corner.) */
 int vic_sprite_hits_code(int i, int lo, int hi)
 {
     int x0 = vic.spx[i] - 24, y0 = vic.spy[i] - 50;
@@ -281,7 +281,7 @@ void vic_render(unsigned char *out)
         if ((vic.spenable >> i) & 1)
             render_sprite(out, i);
 
-    /* Screenshake: fertiges Bild um (x,y) versetzen, Rand = Rahmenfarbe */
+    /* Screenshake: shift finished image by (x,y), edge = border color */
     if (vic_shake_x || vic_shake_y) {
         static unsigned char tmp[VIC_W * VIC_H];
         int x, y;

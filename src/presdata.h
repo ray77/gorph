@@ -1,5 +1,5 @@
-/* presdata.h - Sprachsample (Nutzer-MP3 -> 8-bit unsigned 22050 Hz
- * mono, normalisiert). Automatisch erzeugt. */
+/* presdata.h - speech sample (user MP3 -> 8-bit unsigned 22050 Hz
+ * mono, normalized). Auto-generated. */
 #ifndef PRESDATA_H
 #define PRESDATA_H
 

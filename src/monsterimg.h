@@ -1,12 +1,12 @@
-/* monsterimg.h - fliegendes Monster fuer die Credits (monster_anim_
- * credits.png): 3 Fluegelschlag-Frames, hart gekeyt, Glow-Saum und
- * Rahmenreste entfernt, Augen-Anker deckungsgleich, premultipliziert
- * auf die MAXIMALE Anzeigegroesse (180px) vorskaliert - wird nie
- * hochskaliert. RGBA.
- * Frame 3 (Fluegel unten) hatte in der Vorlage keine Unterschenkel
- * (Beine endeten bei Zeile 135, Frames 1/2 bei 148-151 -> sichtbarer
- * Sprung). Beine+Fuesse aus Frame 2 (Zeilen 129-151) auf 70% Hoehe
- * gestaucht angepfropft: Fuesse enden bei ~144 = leicht angezogen. */
+/* monsterimg.h - flying monster for the credits (monster_anim_
+ * credits.png): 3 wing beat frames, hard keyed, glow fringe and
+ * frame remnants removed, eye anchors aligned, premultiplied
+ * prescaled to the MAXIMUM display size (180px) - never scaled
+ * up. RGBA.
+ * Frame 3 (wings down) had no lower legs in the source image
+ * (legs ended at line 135, frames 1/2 at 148-151 -> visible
+ * jump). Legs+feet from frame 2 (lines 129-151) grafted on
+ * squashed to 70% height: feet end at ~144 = slightly drawn up. */
 #ifndef MONSTERIMG_H
 #define MONSTERIMG_H
 #define MN_W 180

@@ -1,5 +1,5 @@
-/* iehhdata.h - "Iehh" des Daemons (iehh.mp3), wenn er beim Credits-Ende
- * weggewischt wird: 8-Bit unsigned mono 22050 Hz. */
+/* iehhdata.h - "Iehh" of the demon (iehh.mp3), when he is wiped away
+ * at the credits ending: 8-bit unsigned mono 22050 Hz. */
 #ifndef IEHHDATA_H
 #define IEHHDATA_H
 #define IEHH_LEN 55647L

@@ -1,5 +1,5 @@
-/* hahadata.h - Gelaechter des Daemons (GORF_HAHAHAH.mp3) beim
- * Spiegelbruch im Credits-Finale: 8-Bit unsigned mono 22050 Hz. */
+/* hahadata.h - laughter of the demon (GORF_HAHAHAH.mp3) at the
+ * mirror break in credits finale: 8-bit unsigned mono 22050 Hz. */
 #ifndef HAHADATA_H
 #define HAHADATA_H
 #define HAHA_LEN 43311L

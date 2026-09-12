@@ -1,8 +1,8 @@
-/* sound.h - dreistimmige Tonerzeugung nach Vorbild des SID.
+/* sound.h - three-voice tone generation modeled on the SID.
  *
- * Das Original benutzt alle drei SID-Stimmen mit Rechteck- und
- * Rauschwellenform ($D400 ff., Lautstaerke $D418 = $0F).  Hier werden
- * die Stimmen in Software erzeugt und ueber SDL ausgegeben.
+ * The original uses all three SID voices with pulse and noise
+ * waveforms ($D400 ff., volume $D418 = $0F).  Here the voices
+ * are generated in software and played back through SDL.
  */
 #ifndef SOUND_H
 #define SOUND_H
@@ -19,11 +19,11 @@ enum {
 int  sound_init(void);
 void sound_shutdown(void);
 void sound_play(int id);
-void sound_wind(int strength);   /* leiser Dauerwind 0..100 (Titel-Orbit) */
-void sound_mod_start(void);      /* Credits-Chiptune (eingebettetes MOD) */
+void sound_wind(int strength);   /* soft steady wind 0..100 (title orbit) */
+void sound_mod_start(void);      /* Credits chiptune (embedded MOD) */
 void sound_mod_stop(void);
-void sound_mod_seek(double seconds);  /* Credits-Chiptune auf Zeitposition */
-void sound_wipe(int level);           /* sehr leises Wischgeraeusch 0..100 */
-void sound_mod_fade(int frames);  /* MOD in N Logikframes (50 Hz) ausblenden */
+void sound_mod_seek(double seconds);  /* Credits chiptune at time position */
+void sound_wipe(int level);           /* very quiet wipe noise 0..100 */
+void sound_mod_fade(int frames);  /* fade out MOD in N logic frames (50 Hz) */
 
 #endif

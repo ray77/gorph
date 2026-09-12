@@ -1,9 +1,9 @@
-/* armimg.h - Roboterarm mit Schwamm (robo_schwamm.png) fuer das Wisch-
- * Ende der Credits: hart gekeyt, premultipliziert auf 56% skaliert
- * (Nutzer: "verdopple die Handgroesse"), RGBA. AR_SPCX/AR_SPCY =
- * Schwammmitte (Pfadpunkt), AR_SPEX/AR_SPEY + AR_SPRX/AR_SPRY =
- * Wischabdruck-Ellipse (Mitte/Radien im Sprite), AR_RODY0 = Beginn der
- * reinen Stange (nach unten gekachelt bis zum Bildrand). */
+/* armimg.h - robot arm with sponge (robo_schwamm.png) for the wipe
+ * ending of the credits: hard keyed, premultiplied, scaled to 56%
+ * (user: "double the hand size"), RGBA. AR_SPCX/AR_SPCY =
+ * sponge center (path point), AR_SPEX/AR_SPEY + AR_SPRX/AR_SPRY =
+ * wipe footprint ellipse (center/radii in the sprite), AR_RODY0 =
+ * start of the bare rod (tiled down to the image edge). */
 #ifndef ARMIMG_H
 #define ARMIMG_H
 #define AR_W 190

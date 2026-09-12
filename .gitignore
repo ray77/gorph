@@ -1,4 +1,4 @@
-# Build-Artefakte
+# Build artifacts
 src/*.o
 /gorph
 /wiperec

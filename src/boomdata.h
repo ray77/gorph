@@ -1,5 +1,5 @@
-/* boomdata.h - Logo-Boom in den Credits (Nutzer-MP3, 8-bit unsigned
- * 22050 Hz mono, normalisiert). Automatisch erzeugt. */
+/* boomdata.h - logo boom in the credits (user MP3, 8-bit unsigned
+ * 22050 Hz mono, normalized). Automatically generated. */
 #ifndef BOOMDATA_H
 #define BOOMDATA_H
 

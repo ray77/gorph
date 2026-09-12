@@ -1,5 +1,5 @@
-/* Original-Daten der C64-Fassung von Gorph.
- * Alle Tabellen tragen die Adresse ihrer Quelle im entpackten Spiel.
+/* Original data of the C64 version of Gorph.
+ * All tables carry the address of their source in the unpacked game.
  */
 #ifndef GORPH_DATA_H
 #define GORPH_DATA_H

@@ -1,4 +1,4 @@
-/* Auto-extrahiert aus Gorph_C64.prg (siehe reverse/extract.py) */
+/* Auto-extracted from Gorph_C64.prg (see reverse/extract.py) */
 #include "gorph_data.h"
 
 const unsigned char gd_sprites[2304] = {

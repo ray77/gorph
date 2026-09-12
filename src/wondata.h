@@ -1,5 +1,5 @@
-/* wondata.h - "You won"-Sprachsample (Nutzer-MP3 youwon.mp3 ->
- * 8-bit unsigned 22050 Hz mono, normalisiert). Automatisch erzeugt. */
+/* wondata.h - "You won" speech sample (user MP3 youwon.mp3 ->
+ * 8-bit unsigned 22050 Hz mono, normalized). Auto-generated. */
 #ifndef WONDATA_H
 #define WONDATA_H
 

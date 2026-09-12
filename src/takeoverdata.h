@@ -1,5 +1,5 @@
-/* takeoverdata.h - Uebergangs-Sound (Nutzer-MP3, 8-bit unsigned
- * 22050 Hz mono, normalisiert). Automatisch erzeugt. */
+/* takeoverdata.h - transition sound (user MP3, 8-bit unsigned
+ * 22050 Hz mono, normalized). Automatically generated. */
 #ifndef TAKEOVERDATA_H
 #define TAKEOVERDATA_H
 

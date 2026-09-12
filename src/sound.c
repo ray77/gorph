@@ -13,14 +13,14 @@ typedef struct {
     double freq, sweep;
     double phase;
     double vol, decay;
-    double lp, lpk;            /* Tiefpass-Zustand/-Koeffizient (0 = aus) */
+    double lp, lpk;            /* Lowpass state/coefficient (0 = off) */
     unsigned long noise;
 } Voice;
 
 static Voice voice[VOICES];
 static SDL_AudioDeviceID dev;
 
-/* Eingebettete Sprachsamples (8-bit unsigned, 22050 Hz -> 2x gehalten) */
+/* Embedded speech samples (8-bit unsigned, 22050 Hz -> held 2x) */
 #include "wondata.h"
 #include "presdata.h"
 #include "gorphvdata.h"
@@ -34,15 +34,15 @@ static SDL_AudioDeviceID dev;
 #include "wipedata.h"
 #include "moddata.h"
 #include "modplay.h"
-/* Leiser Dauerwind (Titel-Orbit): tiefpassgefiltertes Rauschen mit
- * langsamer Boeen-Modulation, sanft ein-/ausgeblendet */
+/* Soft steady wind (title orbit): lowpass-filtered noise with
+ * slow gust modulation, gently faded in/out */
 static double wind_lvl = 0.0, wind_tgt = 0.0, wind_lp = 0.0, wind_ph = 0.0;
 static unsigned long wind_rng = 0xBADCAFEUL;
 
 typedef struct {
     const unsigned char *d;
-    long len2;                             /* Laenge in 44100er-Einheiten */
-    long pos;                              /* -1 = aus */
+    long len2;                             /* Length in 44100 units */
+    long pos;                              /* -1 = off */
     double gain;
 } Smp;
 #define NSMP 10
@@ -53,27 +53,27 @@ static Smp smp[NSMP] = {
     { again_pcm, AGAIN_LEN * 2L, -1, 0.9 },
     { take_pcm,  TAKE_LEN  * 2L, -1, 0.85 },
     { boom_pcm,  BOOM_LEN  * 2L, -1, 2.5 },
-    { glass_pcm, GLASS_LEN * 2L, -1, 2.2 },  /* Spiegelbruch (Credits-Finale) */
-    { haha_pcm,  HAHA_LEN  * 2L, -1, 2.0 },  /* Gelaechter des Daemons dazu */
-    { iehh_pcm,  IEHH_LEN  * 2L, -1, 2.0 },  /* "Iehh": Daemon wird weggewischt */
-    { ouh_pcm,   OUH_LEN   * 2L, -1, 2.0 }   /* "Ouh": Daemon ist ganz weg */
+    { glass_pcm, GLASS_LEN * 2L, -1, 2.2 },  /* Mirror break (credits finale) */
+    { haha_pcm,  HAHA_LEN  * 2L, -1, 2.0 },  /* Plus the demon's laughter */
+    { iehh_pcm,  IEHH_LEN  * 2L, -1, 2.0 },  /* "Iehh": demon is wiped away */
+    { ouh_pcm,   OUH_LEN   * 2L, -1, 2.0 }   /* "Ouh": demon fully gone */
 };
 
-/* Credits-Chiptune: eigener MOD-Player (modplay.c), Pegel unter dem Rest */
-/* Wischgeraeusch (Credits-Ende): SEHR leise, gleichmaessige Schleife,
- * Pegel folgt traege dem Schwammtempo (sound_wipe 0..100, im Mixer ueber
- * ~250 ms nachgefuehrt), Tonhoehe steigt minimal mit dem Tempo */
+/* Credits chiptune: own MOD player (modplay.c), level below the rest */
+/* Wipe noise (credits end): VERY quiet, even loop, level follows
+ * the sponge tempo sluggishly (sound_wipe 0..100, tracked in the mixer
+ * over ~250 ms), pitch rises minimally with the tempo */
 #define WIPE_GAIN 0.06
 static double wipe_fp = 0.0, wipe_tgt = 0.0, wipe_cur = 0.0;
 #define MOD_GAIN 2.4
 static double modbuf[4096];
 static int    mod_on = 0;
-static double mod_lvl = 1.0, mod_step = 0.0;   /* Ausblendrampe (sound_mod_fade) */
+static double mod_lvl = 1.0, mod_step = 0.0;   /* Fade-out ramp (sound_mod_fade) */
 
-/* TV-Glitch: zerhacktes Whitenoise (Nutzerwunsch statt MP3-Sample):
- * Rauschen wird in zufaellig langen Stuecken (9-60ms) hart an/aus
- * geschaltet, jedes Stueck mit eigener Lautstaerke. */
-static long          gn_left = 0;          /* Restsamples */
+/* TV glitch: chopped-up white noise (user request instead of MP3
+ * sample): noise is switched hard on/off in randomly long chunks
+ * (9-60ms), each chunk with its own volume. */
+static long          gn_left = 0;          /* Remainder */
 static int           gn_gatecnt = 0, gn_gate = 0;
 static double        gn_vol = 0.8;
 static unsigned long gn_rng = 0x9E3779B9UL;
@@ -92,7 +92,7 @@ static void mix(void *ud, Uint8 *stream, int len)
     if (mod_on && n <= 4096) mod_render(modbuf, n);
     for (i = 0; i < n; ++i) {
         double s = (mod_on && n <= 4096) ? modbuf[i] * MOD_GAIN * mod_lvl : 0.0;
-        if (mod_step > 0.0) {             /* MOD blendet aus, dann Stopp */
+        if (mod_step > 0.0) {             /* MOD fades out, then stop */
             mod_lvl -= mod_step;
             if (mod_lvl <= 0.0) { mod_lvl = 0.0; mod_step = 0.0; mod_stop(); mod_on = 0; }
         }
@@ -103,7 +103,7 @@ static void mix(void *ud, Uint8 *stream, int len)
             switch (o->wave) {
             case WAVE_NOISE:
                 val = frand(&o->noise);
-                if (o->lpk > 0.0) {          /* dumpfes Rumpeln statt Zischen */
+                if (o->lpk > 0.0) {          /* dull rumble instead of hiss */
                     o->lp += o->lpk * (val - o->lp);
                     val = o->lp * 3.0;
                 }
@@ -255,38 +255,38 @@ void sound_play(int id)
     if (!dev) return;
     SDL_LockAudioDevice(dev);
     switch (id) {
-    /* Rezepte aus der PRG-Effekt-Engine ($A0C1, Rekorde $A27A-$A3C2):
-     * Frequenzen/Verlaeufe/Dauern nach dekodierten Original-Datensaetzen. */
-    case SND_SHOOT:      /* FA1->2: Rausch-Wusch + fallendes Dreieck-"Pew" */
+    /* Recipes from PRG effect engine ($A0C1, records $A27A-$A3C2):
+     * frequencies/sweeps/durations from decoded original data sets. */
+    case SND_SHOOT:      /* FA1->2: noise whoosh + falling triangle "Pew" */
                          start(1, WAVE_NOISE, 1.0,       0.0, 0.5, 3.3);
                          voice[1].lpk = 0.12;
                          start(0, WAVE_TRI, 1156.0, -2630.0, 0.5, 1.25); break;
-    case SND_HIT:        /* FA8(+$0C): tiefes fallendes Rauschen, LP-Filter */
+    case SND_HIT:        /* FA8(+$0C): deep falling noise, LP filter */
                          start(1, WAVE_NOISE, 1.0,       0.0, 1.0, 0.75);
                          voice[1].lpk = 0.07;
                          start(2, WAVE_PULSE,  76.0,   -80.0, 0.6, 0.85); break;
     case SND_EXPLODE:    start(1, WAVE_NOISE, 1.0,       0.0, 0.9, 1.8);
                          start(2, WAVE_PULSE, 180.0,  -260.0, 0.5, 1.8);  break;
-    case SND_STEP:       /* Marsch-Tick: TIEF und ganz kurz (~86Hz/70ms,
-                          * Video-Messung; Sync-Effekt des Originals) */
+    case SND_STEP:       /* March tick: DEEP and very short (~86Hz/70ms,
+                          * video measurement; original sync effect) */
                          start(2, WAVE_PULSE,  86.0,   -60.0, 0.8, 11.0); break;
-    case SND_BEAM:       /* fx10: Puls-Riser 442->929Hz ueber ~1s */
+    case SND_BEAM:       /* fx10: pulse riser 442->929Hz over ~1s */
                          start(0, WAVE_PULSE, 442.0,   490.0, 0.5, 0.5);  break;
-    case SND_SIREN:      /* fx11: Sirenen-Warble, ~975Hz langsam fallend */
+    case SND_SIREN:      /* fx11: siren warble, ~975Hz slowly falling */
                          start(0, WAVE_TRI,  975.0,  -350.0, 0.5, 0.33);  break;
-    case SND_EJECT:      /* fx14: Dreieck-Zip 91->2037Hz in ~100ms */
+    case SND_EJECT:      /* fx14: triangle zip 91->2037Hz, ~100ms */
                          start(0, WAVE_TRI,   91.0, 19000.0, 0.55, 4.5);  break;
-    case SND_BIGBOOM:    /* fx0D/0E + FA9/0A: Ring-Riser + Doppel-Rumble */
+    case SND_BIGBOOM:    /* fx0D/0E + FA9/0A: ring riser + double rumble */
                          start(0, WAVE_TRI,   46.0,  2000.0, 0.6, 0.9);
                          start(1, WAVE_NOISE, 1.0,       0.0, 1.0, 0.25);
                          voice[1].lpk = 0.05;
                          start(2, WAVE_PULSE, 973.0,  -320.0, 0.6, 0.3);  break;
-    case SND_PLAYER_DIE: /* FA8 + $18/$19: Explosion + tiefes Zweiton-Sputtern */
+    case SND_PLAYER_DIE: /* FA8 + $18/$19: explosion + deep two-tone sputter */
                          start(0, WAVE_PULSE,  33.0,    -5.0, 0.9, 0.9);
                          start(1, WAVE_NOISE, 1.0,       0.0, 1.1, 1.0);
                          voice[1].lpk = 0.06;
                          break;
-    case SND_MISSION:    /* FA6 Whoosh: Puls 91->61Hz, ~3s */
+    case SND_MISSION:    /* FA6 whoosh: pulse 91->61Hz ~3s */
                          start(0, WAVE_PULSE,  91.0,   -10.0, 0.5, 0.2);  break;
     case SND_WON:        smp[0].pos = 0;                                  break;
     case SND_PRESENTS:   smp[1].pos = 0;                                  break;
@@ -297,15 +297,15 @@ void sound_play(int id)
     case SND_HAHA:       smp[7].pos = 0;                                  break;
     case SND_IEHH:       smp[8].pos = 0;                                  break;
     case SND_OUH:        smp[9].pos = 0;                                  break;
-    case SND_GORPHVOICE:  smp[2].pos = 0;   /* Stimme frei: Synth ducken */
+    case SND_GORPHVOICE:  smp[2].pos = 0;   /* Voice free: duck synth */
                          for (i = 0; i < VOICES; ++i) voice[i].vol *= 0.25;
                          break;
-    case SND_GLITCH:     /* zerhacktes Whitenoise, Laenge = Uebergang 2.5s */
+    case SND_GLITCH:     /* chopped white noise, length = transition 2.5s */
                          gn_left = (long)(RATE * 2.5);
                          gn_gatecnt = 0; gn_gate = 0;                     break;
-    case SND_TICK:       /* leiser Typewriter-Klick (~10ms) */
+    case SND_TICK:       /* quiet typewriter click (~10ms) */
                          start(2, WAVE_PULSE, 1400.0,   0.0, 0.12, 18.0); break;
-    case SND_KEY:        /* mechanischer Tastatur-Anschlag (~25ms) */
+    case SND_KEY:        /* mechanical keyboard stroke (~25ms) */
                          start(1, WAVE_NOISE, 1.0,       0.0, 0.35, 14.0);
                          voice[1].lpk = 0.25;
                          start(2, WAVE_PULSE, 620.0,  -300.0, 0.22, 16.0); break;

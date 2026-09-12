@@ -1,8 +1,8 @@
-/* modplay.c - ProTracker-MOD-Replay in C89 (siehe modplay.h).
+/* modplay.c - ProTracker MOD replay in C89 (see modplay.h).
  *
- * Timing wie ProTracker: Tick = 2.5/Tempo Sekunden, Speed Ticks je Row.
- * Tonhoehe aus der Amiga-Periode: f = 7093789.2 / (2 * Periode) (PAL).
- * Mischung: 4 Kanaele linear interpoliert, Summe * 1/4.
+ * Timing like ProTracker: tick = 2.5/tempo seconds, speed ticks/row.
+ * Pitch from the Amiga period: f = 7093789.2 / (2 * period) (PAL).
+ * Mixing: 4 channels linearly interpolated, sum * 1/4.
  */
 #include "modplay.h"
 #include <string.h>
@@ -18,18 +18,18 @@ typedef struct {
 } Sample;
 
 typedef struct {
-    int    smp;                 /* 1..31, 0 = keiner */
+    int    smp;                 /* 1..31, 0 = none */
     double pos, step;
-    int    period, tperiod;     /* aktuell / Ziel (Tonportamento) */
+    int    period, tperiod;     /* current / target (portamento) */
     int    vol;
-    int    arp;                 /* Effektparameter Arpeggio */
-    int    portaspd, tportaspd; /* Effektspeicher */
+    int    arp;                 /* arpeggio effect param */
+    int    portaspd, tportaspd; /* effect memory */
     int    vibpos, vibspd, vibdep;
     int    vslide;
-    int    eff, param;          /* Effekt der laufenden Row */
+    int    eff, param;          /* effect of current row */
     int    delaynote, delaycnt; /* ED */
     int    retrig;              /* E9 */
-    long   offset;              /* 9xx-Speicher */
+    long   offset;              /* 9xx memory */
     int    playing;
 } Chan;
 
@@ -42,7 +42,7 @@ static int  speed, tempo, tick, row, order, ticklen, tickpos;
 static int  active, outrate;
 static int  breakrow, jumporder, patloop_row, patloop_cnt, patdelay;
 
-/* ProTracker-Sinus fuer Vibrato */
+/* ProTracker sine for vibrato */
 static const unsigned char vibtab[32] = {
       0, 24, 49, 74, 97,120,141,161,180,197,212,224,235,244,250,253,
     255,253,250,244,235,224,212,197,180,161,141,120, 97, 74, 49, 24 };
@@ -93,11 +93,11 @@ void mod_start(void)
 {
     memset(ch, 0, sizeof(ch));
     speed = 6; set_tempo(125);
-    tick = 0; row = -1; order = 0; tickpos = 0;   /* advance() zaehlt auf Row 0 */
+    tick = 0; row = -1; order = 0; tickpos = 0;   /* advance() counts to row 0 */
     breakrow = -1; jumporder = -1; patloop_row = 0; patloop_cnt = 0;
     patdelay = 0;
     active = (patdata != 0);
-    tick = speed;                       /* erster Aufruf verarbeitet Row 0 */
+    tick = speed;                       /* first call processes row 0 */
     tickpos = ticklen;
 }
 
@@ -105,9 +105,9 @@ void mod_stop(void)  { active = 0; }
 
 static void advance(void);
 
-/* Zur Zeitposition springen: neu starten und die Ticks OHNE Audio
- * durchlaufen (Pattern-/Effektzustand stimmt dann; laufende Samples
- * beginnen an ihrem Anfang - bei Chiptune-Loops unhoerbar) */
+/* Seek to a time position: restart and run the ticks WITHOUT audio
+ * (pattern/effect state is then correct; running samples
+ * start at their beginning - inaudible with chiptune loops) */
 void mod_seek(double seconds)
 {
     long target = (long)(seconds * outrate), done = 0;
@@ -131,7 +131,7 @@ static void update_step(Chan *c, int period)
 
 static int fine_period(int period, int fine)
 {
-    /* Finetune: 1/8 Halbton je Stufe */
+    /* Finetune: 1/8 semitone/step */
     return (int)(period * pow(2.0, -fine / 96.0) + 0.5);
 }
 
@@ -159,7 +159,7 @@ static void process_row(void)
         if (period > 0) {
             if (c->smp > 0) period = fine_period(period, smp[c->smp].fine);
             if (eff == 3 || eff == 5) {
-                c->tperiod = period;          /* Tonportamento: nur Ziel */
+                c->tperiod = period;          /* Portamento: target only */
             } else if (eff == 0xE && (param >> 4) == 0xD) {
                 c->delaynote = period; c->delaycnt = param & 15;
             } else {
@@ -260,7 +260,7 @@ static void process_tick(void)
             break;
         default: break;
         }
-        if (vs) {                         /* Axy, 5xy, 6xy: Volumeslide */
+        if (vs) {                         /* Axy, 5xy, 6xy: volumeslide */
             if (x) c->vol += x; else c->vol -= y;
             if (c->vol > 64) c->vol = 64;
             if (c->vol < 0) c->vol = 0;

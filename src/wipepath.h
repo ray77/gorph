@@ -1,7 +1,7 @@
-/* wipepath.h - aufgenommener Wischpfad fuer das Credits-Ende (Werkzeug
- * tools/wiperec.c: Maus = Schwamm, Taste gedrueckt = wischt; S speichert
- * hierher). CR_WPATH_N 0 = kein Pfad: das Spiel wischt nach dem
- * eingebauten Plan. Eintraege {x, y, down} je 50-Hz-Frame. */
+/* wipepath.h - recorded sponge path for the credits ending (tool
+ * tools/wiperec.c: mouse = sponge, button held = wiping; S saves
+ * here). CR_WPATH_N 0 = no path: the game wipes by its built-in
+ * plan. Entries {x, y, down} per 50 Hz frame. */
 #ifndef WIPEPATH_H
 #define WIPEPATH_H
 #define CR_WPATH_N 846

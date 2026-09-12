@@ -1,4 +1,4 @@
-/* GORPH-Credits-Logo (GORPH_LOGO_CREDITS.png), RGBA vorskaliert */
+/* GORPH credits logo (GORPH_LOGO_CREDITS.png), RGBA prescaled */
 #define CL_W 420
 #define CL_H 262
 static const unsigned char cl_rgba[CL_W*CL_H*4] = {

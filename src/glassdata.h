@@ -1,5 +1,5 @@
-/* glassdata.h - Glasbruch (glass_broke.mp3) fuer den Credits-Stein:
- * 8-Bit unsigned mono 22050 Hz, wie boomdata.h. */
+/* glassdata.h - glass break (glass_broke.mp3) for the credits rock:
+ * 8-bit unsigned mono 22050 Hz, as boomdata.h. */
 #ifndef GLASSDATA_H
 #define GLASSDATA_H
 #define GLASS_LEN 37413L

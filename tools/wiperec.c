@@ -1,19 +1,19 @@
-/* wiperec.c - Aufnahmewerkzeug fuer den Wischpfad des Credits-Endes.
+/* wiperec.c - recording tool for the wipe path of the credits ending.
  *
  *   make wiperec && ./wiperec tools/wipe_bg.bmp
  *
- * Zeigt das eingefrorene Credits-Bild (640x400) im VOLLBILD (skaliert,
- * Seitenverhaeltnis bleibt). Die Maus fuehrt den Schwammarm; linke Taste
- * gedrueckt = Schwamm auf dem Glas (wischt, wird schwarz). Aufzeichnung
- * beginnt mit dem ersten Druecken, 50 Hz. Noch ungewischte SICHTBARE
- * Pixel (genau die, die das Spiel spaeter nachputzen wuerde, auch kleine
- * Sterne) werden CYAN markiert.
- *   R   = von vorn (Bild und Aufnahme loeschen)
- *   D   = Restmarkierung an/aus
- *   F   = Vollbild/Fenster
- *   S   = speichern nach src/wipepath.h und beenden
- *   Esc = beenden ohne Speichern
- * Danach: make - das Spiel spielt den Pfad statt des eingebauten Plans.
+ * Shows the frozen credits image (640x400) FULLSCREEN (scaled, aspect
+ * ratio kept). The mouse guides the sponge arm; left button held down
+ * = sponge on the glass (wipes, turns black). Recording starts with
+ * the first press, 50 Hz. Still unwiped VISIBLE pixels (exactly the
+ * ones the game would touch up later, small stars too) are marked
+ * CYAN.
+ *   R   = restart (clear image and recording)
+ *   D   = remainder marking on/off
+ *   F   = fullscreen/window
+ *   S   = save to src/wipepath.h and quit
+ *   Esc = quit without saving
+ * Then: make - the game plays the path instead of the built-in plan.
  */
 #include <SDL.h>
 #include <stdio.h>
@@ -29,8 +29,8 @@ static unsigned char mask[W * H];
 static short path[MAXN][3];
 static int n = 0;
 
-/* Abdruck wie im Spiel (main.c cr_wipe_stamp): Ellipse, auf 4x4-Zellen
- * quantisiert (Pixelgrafik) */
+/* Footprint as in the game (main.c cr_wipe_stamp): ellipse, quantized
+ * to 4x4 cells (pixel graphics) */
 #define CELL 4
 static void stamp(double sx, double sy)
 {
@@ -74,11 +74,11 @@ static void save(void)
 {
     FILE *f = fopen("src/wipepath.h", "w");
     int i;
-    if (!f) { fprintf(stderr, "kann src/wipepath.h nicht schreiben\n"); return; }
-    fprintf(f, "/* wipepath.h - aufgenommener Wischpfad fuer das Credits-Ende (Werkzeug\n"
-               " * tools/wiperec.c: Maus = Schwamm, Taste gedrueckt = wischt; S speichert\n"
-               " * hierher). CR_WPATH_N 0 = kein Pfad: das Spiel wischt nach dem\n"
-               " * eingebauten Plan. Eintraege {x, y, down} je 50-Hz-Frame. */\n"
+    if (!f) { fprintf(stderr, "cannot write src/wipepath.h\n"); return; }
+    fprintf(f, "/* wipepath.h - recorded sponge path for the credits ending (tool\n"
+               " * tools/wiperec.c: mouse = sponge, button held = wiping; S saves\n"
+               " * here). CR_WPATH_N 0 = no path: the game wipes by its built-in\n"
+               " * plan. Entries {x, y, down} per 50 Hz frame. */\n"
                "#ifndef WIPEPATH_H\n#define WIPEPATH_H\n#define CR_WPATH_N %d\n"
                "static const short cr_wpath[%d][3] = {\n", n, n > 0 ? n : 1);
     if (n == 0) fprintf(f, "{ 0, 0, 0 }\n");
@@ -87,7 +87,7 @@ static void save(void)
                 (i + 1 < n) ? "," : "", ((i & 7) == 7 || i + 1 == n) ? "\n" : "");
     fprintf(f, "};\n#endif\n");
     fclose(f);
-    printf("gespeichert: src/wipepath.h (%d Frames = %.1f s)\n", n, n / 50.0);
+    printf("saved: src/wipepath.h (%d frames = %.1f s)\n", n, n / 50.0);
 }
 
 int main(int argc, char **argv)
@@ -95,24 +95,24 @@ int main(int argc, char **argv)
     SDL_Window *win; SDL_Renderer *ren; SDL_Texture *tex; SDL_Surface *s;
     int running = 1, started = 0, down = 0, mx = 320, my = 200, i, mark = 1, full = 1;
     Uint32 next;
-    if (argc < 2) { fprintf(stderr, "wiperec hintergrund.bmp\n"); return 1; }
+    if (argc < 2) { fprintf(stderr, "wiperec background.bmp\n"); return 1; }
     if (SDL_Init(SDL_INIT_VIDEO) != 0) return 1;
     s = SDL_LoadBMP(argv[1]);
     if (!s) { fprintf(stderr, "BMP: %s\n", SDL_GetError()); return 1; }
     {
         SDL_Surface *c = SDL_ConvertSurfaceFormat(s, SDL_PIXELFORMAT_ARGB8888, 0);
-        if (!c || c->w != W || c->h != H) { fprintf(stderr, "BMP muss 640x400 sein\n"); return 1; }
+        if (!c || c->w != W || c->h != H) { fprintf(stderr, "BMP must be 640x400\n"); return 1; }
         memcpy(bg, c->pixels, sizeof(bg));
         SDL_FreeSurface(c); SDL_FreeSurface(s);
     }
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");   /* scharf skalieren */
-    win = SDL_CreateWindow("wiperec - Maus wischt, S speichert, R neu, D Marker, F Vollbild, Esc",
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");   /* sharp scaling */
+    win = SDL_CreateWindow("wiperec - mouse wipes, S save, R restart, D markers, F fullscreen, Esc",
                            SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, W * 2, H * 2,
                            SDL_WINDOW_FULLSCREEN_DESKTOP);
     ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED);
     SDL_RenderSetLogicalSize(ren, W, H);
     tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, W, H);
-    printf("Wischen: linke Maustaste halten. R = neu, D = Restmarkierung, F = Vollbild, S = speichern+Ende, Esc = Ende\n");
+    printf("Wipe: hold the left mouse button. R = restart, D = leftover markers, F = fullscreen, S = save+exit, Esc = exit\n");
     next = SDL_GetTicks();
     while (running) {
         SDL_Event e;
@@ -139,8 +139,8 @@ int main(int argc, char **argv)
         memcpy(fb, bg, sizeof(fb));
         for (i = 0; i < W * H; ++i) {
             if (mask[i]) { fb[i] = 0xFF000000UL; continue; }
-            if (mark) {                   /* sichtbarer Rest (Luminanz >= 28)
-                                           * wie im Spiel: cyan hervorheben */
+            if (mark) {                   /* visible rest (luminance >= 28)
+                                           * as in the game: highlight cyan */
                 Uint32 c = bg[i];
                 if ((((c >> 16) & 0xFF) | ((c >> 8) & 0xFF) | (c & 0xFF)) >= 28)
                     fb[i] = 0xFF40FFFFUL;
@@ -160,7 +160,7 @@ int main(int argc, char **argv)
             Sint32 wait = (Sint32)(next - SDL_GetTicks());
             if (wait > 0) SDL_Delay((Uint32)wait); else next = SDL_GetTicks();
         }
-        if (n >= MAXN) { printf("Aufnahme voll (%d Frames)\n", MAXN); }
+        if (n >= MAXN) { printf("recording full (%d frames)\n", MAXN); }
     }
     SDL_Quit();
     return 0;

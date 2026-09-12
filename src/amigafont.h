@@ -1,6 +1,6 @@
-/* Amiga-Bitmapfont (amiga_Font.png), ASCII 32..125.
- * af_bits: 32 Zeilen je Glyph, Pixel linksbuendig ab Bit 31;
- * af_w: proportionale Glyphbreite in Pixeln. */
+/* Amiga bitmap font (amiga_Font.png), ASCII 32..125.
+ * af_bits: 32 rows per glyph, pixels left-aligned at bit 31;
+ * af_w: proportional glyph width in pixels. */
 #define AF_FIRST 32
 #define AF_COUNT 94
 #define AF_H 32

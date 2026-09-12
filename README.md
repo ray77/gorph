@@ -2,57 +2,75 @@
 
 **Galactic Organic Robot Phalanx**
 
-Ein nativer Fixed-Screen-Shooter im Stil der fruehen 80er, geschrieben in
-ANSI C89 mit SDL2 — praesentiert im Look eines C64 samt Boot-Screen,
-Rasterfarben, Multicolor-Sprites und Demo-Szene-Effekten.
+A native fixed-screen shooter in early-80s style, written in ANSI C89 with
+SDL2 - presented in the look of a C64, complete with boot screen, raster
+colors, multicolor sprites and demoscene effects.
 
-Die Phalanx der Gorphianer greift in vier Wellen an. Wer alle vier
-uebersteht, beginnt den Feldzug von vorn — schneller und gnadenloser.
+The Gorphian phalanx attacks in four waves. Survive all four and the
+campaign starts over - faster and more merciless.
 
-## Missionen
+## Missions
 
-1. **Astro Battles** — Alien-Formation hinter Schutzschilden
-2. **Laser Attack** — Kanonenverbaende mit Sturzflug-Jaegern
-3. **Space Warp** — Spiralflug-Objekte im Sternentunnel
-4. **Flag Ship** — das Flaggschiff, Stueck fuer Stueck zerlegbar
+1. **Astro Battles** - alien formation behind shields
+2. **Laser Attack** - gun squads with dive-bombing fighters
+3. **Space Warp** - spiraling objects in a star tunnel
+4. **Flag Ship** - the flagship, dismantled piece by piece
 
-## Bauen
+## Building
 
-Benoetigt SDL2 (`sdl2-config` im Pfad):
+Requires SDL2 (`sdl2-config` in the path):
 
 ```
 make
 ./gorph
 ```
 
-## Steuerung
+## Controls
 
-| Taste            | Funktion            |
+| Key              | Action              |
 |------------------|---------------------|
-| Pfeile / WASD    | Bewegen             |
-| Leertaste        | Feuer               |
-| F11              | Vollbild            |
-| Esc              | Beenden             |
+| Arrows / WASD    | Move                |
+| Space            | Fire                |
+| F11              | Fullscreen          |
+| Esc              | Quit                |
 
-Gamepad wird automatisch erkannt.
+A gamepad is detected automatically.
 
-Debug-/Cheat-Tasten sind im Normalstart aus. `./gorph -cheat` schaltet sie ein:
-1–4 Mission 1–4, 5 Titel-Intro neu, 6 Flagship-Kill, 8 Level-8-Outro,
-9 Boot-Screen neu, N nächste Mission inkl. Rang, 0 in den Credits: Sprung kurz vors Ende.
+Debug/cheat keys are off on a normal start. `./gorph -cheat` enables them:
+1-4 mission 1-4, 5 restart title intro, 6 flagship kill, 8 level-8 outro,
+9 restart boot screen, N next mission including rank, 0 in the credits: jump
+close to the end.
 
 ## Features
 
-- C64-Boot-Screen mit Typewriter-Prompt, danach nahtloser Zoom ins Spiel
-- Intro mit Sternenfeld-Rotation, Logo-Einflug, Sprachausgabe und
-  kreisendem Roboter samt Motion-Blur
-- Attract-Mode: nach Inaktivitaet spielt eine Demo (Astro Battles und
-  Space Warp im Wechsel)
-- Lippensynchrone Typewriter-Outros mit Sprachsamples
-- Software-VIC mit 16 Sprites, Screenshake, TV-Glitch-Uebergaengen
-- Synthesizer-Soundeffekte plus gesampelte Sprache
+- C64 boot screen with typewriter prompt, then a seamless zoom into the game
+- Intro with starfield rotation, logo fly-in, speech and an orbiting robot
+  with motion blur
+- Attract mode: after a while a demo plays itself (Astro Battles and Space
+  Warp in alternation)
+- Lip-synced typewriter outros with speech samples
+- Software VIC with 16 sprites, screen shake, TV glitch transitions
+- Synthesizer sound effects plus sampled speech
+- Amiga-demo credits (key C on the title screen): starfield morph, sine
+  scroller with copper fill and floor mirror, lens flares, an embedded
+  ProTracker MOD player, an orbiting demon and a finale in which a dropped
+  rock shatters the mirror and a sponge arm wipes the screen clean
 
-## Technik
+## Technology
 
-Spiellogik, Renderer (Text-/Bitmap-Multicolor-Modi) und Klangerzeugung
-sind komplett eigenstaendig implementiert; alle Assets liegen eingebettet
-im Quellcode. Kein fremder Programmcode enthalten.
+Game logic, renderer (text and bitmap multicolor modes) and sound synthesis
+are implemented from scratch; all assets are embedded in the source. No
+foreign program code included.
+
+## Tools
+
+`tools/wiperec.c` records the sponge path for the credits finale:
+
+```
+make wiperec
+./wiperec tools/wipe_bg.bmp
+```
+
+Hold the left mouse button to wipe, `R` restarts, `D` toggles the leftover
+markers, `F` toggles fullscreen, `S` saves to `src/wipepath.h` and exits.
+Rebuild afterwards and the game plays back the recorded path.

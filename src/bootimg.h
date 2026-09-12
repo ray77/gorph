@@ -1,5 +1,5 @@
-/* bootimg.h - Commodore-1701-Monitor, leerer Screen (Nutzer-PNG,
- * RGB, fuer die 640x400-Boot-Textur). Automatisch erzeugt. */
+/* bootimg.h - Commodore 1701 monitor, empty screen (user PNG,
+ * RGB, for 640x400 boot texture). Automatically generated. */
 #ifndef BOOTIMG_H
 #define BOOTIMG_H
 

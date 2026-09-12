@@ -1,5 +1,5 @@
-/* againdata.h - "You won again"-Sample (Nutzer-MP3, 8-bit unsigned
- * 22050 Hz mono, normalisiert). Automatisch erzeugt. */
+/* againdata.h - "You won again" sample (user MP3, 8-bit unsigned
+ * 22050 Hz mono, normalized). Auto-generated. */
 #ifndef AGAINDATA_H
 #define AGAINDATA_H
 

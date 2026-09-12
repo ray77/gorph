@@ -1,19 +1,19 @@
-/* main.c - SDL2-Frontend der nativen Gorph-Fassung.
+/* main.c - SDL2 frontend of the native Gorph version.
  *
- *   ./gorph                 spielen
- *   ./gorph -cheat          dazu Debug-Tasten: 1-4 Mission 1-4, 5 Titel-
- *                           Intro neu, 6 Flagship-Kill, 8 Level-8-Outro,
- *                           9 Boot-Screen neu, N naechste Mission inkl. Rang,
- *                           0 in den Credits: Sprung kurz vors Ende
- *   ./gorph -f N -shot b.bmp   N Logikschritte rechnen, Einzelbild schreiben
- *   make wiperec && ./wiperec tools/wipe_bg.bmp   Wischpfad fuer das
- *                           Credits-Ende mit der Maus aufnehmen (S = speichern
- *                           nach src/wipepath.h, dann make)
- *   Headless-Hooks (nur mit -shot): GORPH_JUMP=m, GORPH_AUTOFIRE=1,
- *   GORPH_CREDITS=N, GORPH_BOOT=1, GORPH_FRAC=x, GORPH_WDBG=maske.pgm
+ *   ./gorph                 play
+ *   ./gorph -cheat          plus debug keys: 1-4 mission 1-4, 5 replay title
+ *                           intro, 6 flagship kill, 8 level 8 outro,
+ *                           9 replay boot screen, N next mission incl. rank,
+ *                           0 in the credits: jump to just before the end
+ *   ./gorph -f N -shot b.bmp   run N logic steps, write single frame
+ *   make wiperec && ./wiperec tools/wipe_bg.bmp   record wipe path for the
+ *                           credits ending with the mouse (S = save to
+ *                           src/wipepath.h, then make)
+ *   Headless hooks (only with -shot): GORPH_JUMP=m, GORPH_AUTOFIRE=1,
+ *   GORPH_CREDITS=N, GORPH_BOOT=1, GORPH_FRAC=x, GORPH_WDBG=mask.pgm
  *
- * Steuerung: Pfeiltasten/WASD, Leertaste = Feuer, F11 Vollbild, Esc,
- * C im Titel = Credits.
+ * Controls: arrow keys/WASD, space = fire, F11 fullscreen, Esc,
+ * C on the title screen = credits.
  */
 #include <SDL.h>
 #include <stdio.h>
@@ -60,10 +60,10 @@ static void to_pixels(void)
     }
 }
 
-/* Boot-Screen auf EIGENER 640x400-Textur (hoehere Aufloesung als das
- * Spiel - "Echtbild"): 1701-Monitor, Typewriter "PRESS SPACE ON TAPE"
- * ab der READY.-Cursorposition (16px-Glyphen passend zur BASIC-
- * Schrift), Zoom in den Bildschirm + Fade. */
+/* Boot screen on its OWN 640x400 texture (higher resolution than
+ * the game - "real image"): 1701 monitor, typewriter "PRESS SPACE
+ * ON TAPE" starting at the READY. cursor position (16px glyphs to
+ * match the BASIC font), zoom into the screen + fade. */
 static Uint32 bpix[BOOT_TW * BOOT_TH];
 
 static int bglyph(char c)
@@ -84,9 +84,9 @@ static void boot_render(void)
     int hgl = (g.state == ST_BOOT && t >= 30 && t < 70);
     int roll = 0;
     int cf = 256;
-    int cur = (t >= 50 && !((t >> 4) & 1));   /* blinkt unendlich */
-    if (hgl) {                            /* V-Hold-Slip: ganzer Screen
-                                           * springt vertikal mit Wrap */
+    int cur = (t >= 50 && !((t >> 4) & 1));   /* blinks forever */
+    if (hgl) {                            /* V-Hold slip: whole screen
+                                           * jumps vertically, wraps */
         unsigned long sd = (unsigned long)(t / 3) * 2654435761UL;
         int amp = (70 - t);
         if (amp > 0) roll = (int)((sd >> 8) % (unsigned long)(amp * 2 + 1)) - amp;
@@ -95,7 +95,7 @@ static void boot_render(void)
     if (f2 < 0) f2 = 0;
     shown = (t < 50) ? 0 : (t - 50) / 4;
     if (shown > 18) shown = 18;
-    if (g.state != ST_BOOT) {             /* Crossfade-Phase: Text steht */
+    if (g.state != ST_BOOT) {             /* Crossfade phase: text holds */
         f2 = 256; shown = 18; cur = 0;
     }
     for (y = 0; y < BOOT_TH; ++y)
@@ -114,7 +114,7 @@ static void boot_render(void)
                     boot_rgb + (sy * BOOTI_W + (sx - 112)) * 3;
                 r = p[0]; gg = p[1]; b = p[2];
             }
-            /* BASIC-Header: blitzt bei t=30 mit Bildstoerung ein */
+            /* BASIC header: flashes in at t=30 with image glitch */
             if (t >= 30 && sy >= 74 && sy < 94) {
                 int gsx = sx, on = 0, code = -1, row = 0, ci;
                 if (hgl) gsx += ((sy * 31 + t * 17) % 9) - 4;
@@ -174,8 +174,8 @@ static void boot_render(void)
             bpix[y * BOOT_TW + x] = 0xFF000000UL | (r << 16) | (gg << 8) | b;
         }
 }
-/* Typewriter-Alphablending: von game.c gemeldete Textzellen werden
- * stufenlos gedimmt (Hintergrund dort ist schwarz -> reiner Fade) */
+/* Typewriter alpha blending: text cells reported by game.c are
+ * dimmed continuously (background there is black -> pure fade) */
 static void tw_overlay(void)
 {
     int i, x, y;
@@ -183,14 +183,14 @@ static void tw_overlay(void)
         unsigned long a = g.tw_a[i];
         int px = g.tw_cx[i] * 8, py = g.tw_cy[i] * 8;
         for (y = 0; y < 8; ++y) {
-            /* leichte Verdunkelung nach unten (Photoshop-Referenz) */
+            /* slight darkening downward (Photoshop reference) */
             unsigned long f = (a * (256UL - (unsigned long)y * 15UL)) >> 8;
             for (x = 0; x < 8; ++x) {
                 Uint32 *p = &pixels[(py + y) * VIC_W + px + x];
                 unsigned long r, g2, b;
                 if ((*p & 0xFFFFFFUL) != 0xFFFFFFUL)
-                    continue;             /* nur Textpixel (weiss) dimmen -
-                                           * Sprites davor bleiben unberuehrt */
+                    continue;             /* dim only text pixels (white) -
+                                           * sprites in front stay untouched */
                 r = (0xFFUL * f) >> 8;
                 g2 = r; b = r;
                 *p = 0xFF000000UL | (r << 16) | (g2 << 8) | b;
@@ -199,8 +199,8 @@ static void tw_overlay(void)
     }
 }
 
-/* Outro-Watermark: Robot als STANDBILD mit echter Transparenz
- * (Alpha g.robot_a/64) ueber das fertige RGB-Bild blenden, mittig oben */
+/* Outro watermark: robot as a FREEZE FRAME with real transparency
+ * (alpha g.robot_a/64) blended over the finished RGB image, top center */
 static void robot_overlay(void)
 {
     int x, y, a = g.robot_a;
@@ -223,74 +223,74 @@ static void robot_overlay(void)
 }
 
 /* ====================================================================== */
-/*  Credits (Taste C im Titel) - Amiga-Demo-Stil auf der 640x400-Textur:  */
-/*  3D-Starfield fliegt auf den Betrachter zu und rotiert, mit echtem     */
-/*  Motion Blur (abklingender Trail-Puffer); Logo blendet oben langsam    */
-/*  ein; Sinescroller "CREDITS:" schwingt in der Mitte.                   */
+/*  Credits (key C on title screen) - Amiga demo style, 640x400 texture:  */
+/*  3D starfield flies toward the viewer and rotates, with real           */
+/*  Motion blur (decaying trail buffer); logo fades in slowly at          */
+/*  the top; sine scroller "CREDITS:" swings in the middle.               */
 /* ====================================================================== */
 
 #define CR_STARS 130
 
 static double cr_sx[CR_STARS], cr_sy[CR_STARS], cr_sz[CR_STARS];
 static Uint32 cr_trail[BOOT_TW * BOOT_TH];
-static Uint32 cr_last[VIC_W * VIC_H];     /* Titel-Schnappschuss (Ausblendung) */
+static Uint32 cr_last[VIC_W * VIC_H];     /* title snapshot (fade out) */
 static int    cr_ready = 0;
-static int    cr_mirror = 0;                  /* Glyphen gespiegelt unter CR_ML */
-#define CR_TY0 240                            /* Scrolltext-Ebene ab Zeile 240 */
-static Uint32 cr_tlayer[BOOT_TW * BOOT_TH];   /* Scrolltext-Ebene (AARRGGBB):
-                                               * Glyphen landen hier, die Ebene
-                                               * wird mit Linsenversatz und
-                                               * Daemon-Schatten eingeblendet */
-#define CR_ML 358                             /* Spiegelkante (Bodenlinie) */
-/* Credits-FINALE (nach der Textsequenz): der Daemon holt hinter dem Logo
- * einen Stein, kommt ueber die rechte Seite nach vorn, haelt vor der
- * Logomitte, laesst ihn fallen; der Stein zerschlaegt den Spiegelboden
- * (Scherben, Glas-Sound, MOD blendet aus), Bild blendet aus -> Titel. */
-#define CR_ROCK_G 0.20                        /* Fallbeschleunigung Stein px/f^2 */
-#define CR_FIN_B  40.0                        /* hinter dem Logo: Stein holen */
-#define CR_FIN_C 200.0                        /* halber Umlauf nach vorn */
-#define CR_FIN_D 100.0                        /* vorn halten, dann loslassen */
-#define CR_NSH   56                           /* Scherben */
+static int    cr_mirror = 0;                  /* glyphs mirrored below CR_ML */
+#define CR_TY0 240                            /* scrolltext layer from row 240 */
+static Uint32 cr_tlayer[BOOT_TW * BOOT_TH];   /* scrolltext layer (AARRGGBB):
+                                               * glyphs land here, the layer
+                                               * is faded in with lens offset
+                                               * and demon shadow */
+#define CR_ML 358                             /* mirror edge (floor line) */
+/* Credits FINALE (after the text sequence): the demon fetches a rock
+ * from behind the logo, comes around the right side to the front, holds
+ * before the logo center, drops it; the rock smashes the mirror floor
+ * (shards, glass sound, MOD fades out), image fades out -> title. */
+#define CR_ROCK_G 0.20                        /* rock fall acceleration px/f^2 */
+#define CR_FIN_B  40.0                        /* behind the logo: fetch rock */
+#define CR_FIN_C 200.0                        /* half a lap to the front */
+#define CR_FIN_D 100.0                        /* hold at front, then release */
+#define CR_NSH   56                           /* shards */
 static int    cr_fin_ready = 0, cr_dir0 = 1, cr_broken = 0, cr_laughed = 0;
-/* WISCHER (Credits-Schluss): ein Roboterarm mit Schwamm wischt das Bild
- * weg - menschlich: der Schwamm kreist staendig (Radius atmet), faehrt
- * in Bahnen im Zickzack von oben nach unten, putzt dann gezielt nach,
- * bis KEIN Pixel mehr steht, und faehrt nach unten aus dem Bild. Der
- * Wischabdruck ist die Schwammform selbst; gewischte Pixel bleiben
- * schwarz (Maske). Zustand wird je Render mit dt fortgeschrieben. */
-#define CR_WIPE_START 100.0                   /* nach dem Aufprall */
-#define CR_WIPE_BANDS 8                       /* Bahnen a 50 px */
-static int    cr_wp = -1;                     /* -1 aus, 0 Einfahrt, 1 Strich,
-                                               * 2 Uebergang zum naechsten
-                                               * Strich, 3 Nachputzen, 4 fertig
-                                               * (Hand bleibt stehen, Crossfade
-                                               * zum Titel) */
+/* WIPER (end of credits): a robot arm with a sponge wipes the image
+ * away - humanly: the sponge circles constantly (radius breathes),
+ * moves in zigzag paths from top to bottom, then does a targeted
+ * touch-up pass until NO pixel is left, and exits downward out of
+ * the picture. The wipe footprint is the sponge shape itself; wiped
+ * pixels stay black (mask). State is advanced per render with dt. */
+#define CR_WIPE_START 100.0                   /* after the impact */
+#define CR_WIPE_BANDS 8                       /* paths of 50 px */
+static int    cr_wp = -1;                     /* -1 off, 0 entry, 1 stroke,
+                                               * 2 transition to the next
+                                               * stroke, 3 touch-up, 4 done
+                                               * (hand stays put, crossfade
+                                               * to the title screen) */
 static int    cr_wband = 0, cr_frozen = 0, cr_wtarget = -1,
-              cr_wdown = 0,                   /* Pfadmodus: Schwamm unten */
-              cr_iehh = 0, cr_ouh = 0;        /* "Iehh"/"Ouh" schon gespielt */
+              cr_wdown = 0,                   /* path mode: sponge bottom */
+              cr_iehh = 0, cr_ouh = 0;        /* "Iehh"/"Ouh" already played */
 static double cr_wt = 0.0, cr_wx = 40.0, cr_wy = 460.0, cr_wcirc = 0.0,
               cr_wpx = 0.0, cr_wpy = 0.0, cr_wdur = 45.0, cr_wspd = 0.0,
-              cr_wax = 18.0, cr_way = 14.0;   /* aktuelle Schrubb-Amplituden */
+              cr_wax = 18.0, cr_way = 14.0;   /* current scrub amplitudes */
 static unsigned char cr_wmask[BOOT_TW * BOOT_TH];
-static Uint32 cr_freeze[BOOT_TW * BOOT_TH];   /* Standbild beim Wischen: Sterne
-                                               * und Animationen bleiben stehen */
-static unsigned char cr_mmask[BOOT_TW * BOOT_TH]; /* Monsterpixel im Standbild
-                                                   * (fuer das "Iehh") */
-static int    cr_titlefade = 0;               /* Titel blendet nach dem Wischen
-                                               * ein, die Hand aus (Crossfade) */
-#define CR_LAUGH_AT 15.0                      /* Lachen 0.3 s nach dem Aufprall */
+static Uint32 cr_freeze[BOOT_TW * BOOT_TH];   /* freeze frame while wiping: stars
+                                               * and animations stand still */
+static unsigned char cr_mmask[BOOT_TW * BOOT_TH]; /* monster pixels in the freeze frame
+                                                   * (for the "Iehh") */
+static int    cr_titlefade = 0;               /* title screen fades in after the
+                                               * wipe, hand out (crossfade) */
+#define CR_LAUGH_AT 15.0                      /* laughter 0.3 s after impact */
 static double cr_tend, cr_turns0, cr_tA, cr_tdrop, cr_timp, cr_rx0, cr_ry0;
-static Uint32        cr_snap[BOOT_TW * (BOOT_TH - CR_ML)];  /* Spiegel bei Bruch */
-static unsigned char cr_shid[BOOT_TW * (BOOT_TH - CR_ML)];  /* Scherben-Zellen */
+static Uint32        cr_snap[BOOT_TW * (BOOT_TH - CR_ML)];  /* mirror on break */
+static unsigned char cr_shid[BOOT_TW * (BOOT_TH - CR_ML)];  /* shard cells */
 static struct { double mx, my, vx, vy, w; int x0, y0, x1, y1; } cr_sh[CR_NSH];
-static double cr_tf = 0.0, cr_tprev = -1.0;  /* Credits-Zeit in 50Hz-Frames,
-                                              * mit Sub-Frame-Anteil (VSync) */
-static double cr_ox = 0.0, cr_oy = 0.0;   /* Kamera-Seitwaertsversatz (Welt) */
-static double cr_cs = 1.0, cr_sn = 0.0;   /* aktuelle Feldrotation */
-/* Buchstaben-Flucht: taucht der Daemon vor den Scroller, fliehen die
- * Glyphen seitlich aus dem Bild (die Rand-Vignette blendet den Abgang
- * weich aus) und trauen sich zurueck, waehrend er noch dasteht.
- * 0 = daheim, 1 = ganz draussen; getaktet einmal je Frame. */
+static double cr_tf = 0.0, cr_tprev = -1.0;  /* credits time in 50Hz frames,
+                                              * with sub-frame part (VSync) */
+static double cr_ox = 0.0, cr_oy = 0.0;   /* camera sideways offset (world) */
+static double cr_cs = 1.0, cr_sn = 0.0;   /* field rotation now */
+/* letter flight: if the demon steps in front of the scroller, the
+ * glyphs flee sideways out of the image (the edge vignette fades the
+ * exit softly) and dare to come back while he still stands there.
+ * 0 = home, 1 = fully outside; clocked once per frame. */
 static double cr_fluchtF = 0.0;
 static double cr_flucht_voll = -1.0, cr_flucht_prev = 0.0;
 
@@ -304,23 +304,23 @@ static double cr_frand(void)
 
 static void cr_star_reset(int i, int deep)
 {
-    /* um die (geschwenkte) Kameramitte spawnen, und zwar IM
-     * Sichtfenster der gewuerfelten Tiefe (das schrumpft mit z -
-     * sonst spawnen nahe Sterne unsichtbar und cyceln nur);
-     * Versatz aus dem rotierten Raum zurueckdrehen */
+    /* spawn around the (panned) camera center, namely IN
+     * the view window of the rolled depth (it shrinks with z -
+     * otherwise near stars spawn invisible and only cycle);
+     * rotate the offset back out of the rotated space */
     double z = deep ? 1.0 : 0.08 + (cr_frand() + 1.0) * 0.46;
     cr_sz[i] = z;
     cr_sx[i] = cr_frand() * 1.35 * z + (-cr_ox) * cr_cs + (-cr_oy) * cr_sn;
     cr_sy[i] = cr_frand() * 1.35 * z - (-cr_ox) * cr_sn + (-cr_oy) * cr_cs;
 }
 
-/* Nahtloser Uebergang Titel -> Credits: die 40 Intro-Sterne werden an
- * ihrer aktuellen Bildposition in die 3D-Bahn uebernommen (morphen),
- * der Rest des Feldes rieselt gestaffelt nach; das letzte Titelbild
- * blendet additiv aus. VOR dem Statewechsel aufrufen (Titel-Zeit!). */
+/* Seamless transition title -> credits: the 40 intro stars are taken
+ * into the 3D path at their current screen position (morphing), the
+ * rest of the field trickles in staggered; the last title image
+ * fades out additively. Call BEFORE the state change (title time!). */
 static void cr_finale_reset(void)
 {
-    cr_broken = 0;                        /* Spiegel wieder heil */
+    cr_broken = 0;                        /* mirror intact again */
     cr_laughed = 0;
     cr_wp = -1; cr_wband = 0; cr_wt = 0.0;
     cr_wx = 40.0; cr_wy = 460.0; cr_wcirc = 0.0; cr_frozen = 0; cr_wtarget = -1;
@@ -342,7 +342,7 @@ static void cr_morph_init(void)
             cr_sx[i] = ((double)tx * 2.0 - 320.0) * z / 230.0;
             cr_sy[i] = ((double)ty * 2.0 - 200.0) * z / 230.0;
         } else {
-            cr_sz[i] = -1.0 - (double)(i - 40);   /* wartet (i-40) Frames */
+            cr_sz[i] = -1.0 - (double)(i - 40);   /* waits (i-40) frames */
         }
     }
     memset(cr_trail, 0, sizeof(cr_trail));
@@ -374,7 +374,7 @@ static void cr_text(const char *s, int x, int y,
             const unsigned long *bits = af_bits[c - AF_FIRST];
             int w = af_w[c - AF_FIRST];
             for (gy = 0; gy < AF_H; ++gy) {
-                /* leichter Vertikalverlauf: oben weiss, unten blaeulich */
+                /* slight vertical gradient: white on top, bluish below */
                 unsigned long f = 256UL - (unsigned long)gy * 3UL;
                 int py = y + gy;
                 if (py < 0 || py >= BOOT_TH) continue;
@@ -393,7 +393,7 @@ static void cr_text(const char *s, int x, int y,
     }
 }
 
-static int cr_gw(int c);                 /* '*' = eigener Sternglyph, s.u. */
+static int cr_gw(int c);                 /* '*' = own star glyph (below) */
 
 static int cr_text_w(const char *s)
 {
@@ -406,8 +406,8 @@ static int cr_text_w(const char *s)
     return w - 3;
 }
 
-/* HSV-Regenbogen (6 Segmente a 256) - gemeinsame Palette fuer die
- * Copperlinie und die Scroller-Fuellung */
+/* HSV rainbow (6 segments of 256) - shared palette for the copper
+ * line and the scroller fill */
 static void cr_rainbow(int ph, int *r, int *gg, int *b)
 {
     int seg = (ph >> 8) % 6, f = ph & 255;
@@ -421,8 +421,8 @@ static void cr_rainbow(int ph, int *r, int *gg, int *b)
     }
 }
 
-/* Mini-Textzeile (6px hoch, OR-Downsampling vom 32er-Font);
- * Verlauf: oben dunkles Grau -> unten weiss */
+/* Mini text line (6px high, OR downsampling of 32 font);
+ * gradient: dark gray at top -> white at bottom */
 #define SIG_H 6
 
 static int cr_sig_gw(int c)
@@ -474,8 +474,8 @@ static void cr_text_small(const char *s, int x, int y, int a)
     }
 }
 
-/* Fuenfzackiger Stern als Sonderglyph fuer '*' im Credits-Text (32x32,
- * Bit 31 = linke Spalte, wie af_bits) */
+/* Five-pointed star as special glyph for '*' in credits text (32x32,
+ * bit 31 = left column, like af_bits) */
 static const unsigned long star_bits[32] = {
     0x00000000UL, 0x00010000UL, 0x00010000UL, 0x00038000UL,
     0x00038000UL, 0x00038000UL, 0x0007C000UL, 0x0007C000UL,
@@ -492,14 +492,14 @@ static const unsigned long *cr_gbits(int c)
 static int cr_gw(int c)
 { return (c == '*') ? STAR_W : af_w[c - AF_FIRST]; }
 
-/* Ein Glyph GEDREHT um sein Zentrum blitten (Ziel-Iteration mit
- * inverser Rotation) - die Buchstaben folgen der Wellentangente;
- * Copper-Fuellung bleibt an der RASTERZEILE (wie der Streifen) */
+/* Blit a glyph ROTATED about its center (target iteration with
+ * inverse rotation) - the letters follow the wave tangent; copper
+ * fill stays on the RASTER LINE (like the stripe) */
 static void cr_glyph_rot(int c, int cx, int cy, double ang, int cph, double sc)
 {
     const unsigned long *bits;
     int w, dx, dy, hw, rx, ry;
-    double cs = cos(ang) / sc, sn = sin(ang) / sc;   /* /sc = verkleinern */
+    double cs = cos(ang) / sc, sn = sin(ang) / sc;   /* /sc = shrink */
     if (c < AF_FIRST || c >= AF_FIRST + AF_COUNT) return;
     bits = cr_gbits(c);
     w = cr_gw(c);
@@ -513,8 +513,8 @@ static void cr_glyph_rot(int c, int cx, int cy, double ang, int cph, double sc)
             if (sx < 0 || sx >= w || sy < 0 || sy >= AF_H) continue;
             if (!((bits[sy] >> (31 - sx)) & 1)) continue;
             if (px < 0 || px >= BOOT_TW || py < 0 || py >= BOOT_TH) continue;
-            /* warme Palette: dunkelrot -> gelb -> dunkelrot (zyklisch,
-             * kein Blauanteil) */
+            /* warm palette: dark red -> yellow -> dark red (cyclic,
+             * no blue component) */
             {
                 int ph = ((py * 18 + cph) % 1536 + 1536) % 1536;
                 int tri = (ph < 768) ? ph / 3 : (1535 - ph) / 3;
@@ -523,17 +523,17 @@ static void cr_glyph_rot(int c, int cx, int cy, double ang, int cph, double sc)
                 gg = tri;
                 b = 0;
             }
-            /* Rand-Vignette: 120px vor dem linken/rechten Bildrand
-             * stufenlos in den Hintergrund blenden - Ein-/Ausfahrt
-             * "entsteht" statt hart am Rand aufzutauchen */
+            /* edge vignette: 120px before the left/right screen edge
+             * blend smoothly into the background - entry/exit
+             * "emerges" instead of popping up at the edge */
             {
                 int e = (px < BOOT_TW - 1 - px) ? px : BOOT_TW - 1 - px;
                 int xd = px, yd = py;
                 unsigned long fa = (e >= 120) ? 256UL
                                  : (unsigned long)e * 256UL / 120UL;
-                if (cr_mirror) {          /* Bodenspiegelung: gestuerzt unter
-                                           * die Kante, gedimmt, mit der Tiefe
-                                           * verblassend, leichtes Kraeuseln */
+                if (cr_mirror) {          /* floor reflection: flipped below
+                                           * the edge, dimmed, fading with
+                                           * depth, slight ripple */
                     int depth;
                     yd = 2 * CR_ML - py;
                     if (py >= CR_ML || yd >= BOOT_TH) continue;
@@ -544,8 +544,8 @@ static void cr_glyph_rot(int c, int cx, int cy, double ang, int cph, double sc)
                     fa = fa * 120UL >> 8;
                     if (!fa) continue;
                 }
-                /* in die Textebene (Alpha = Deckung); eingeblendet wird
-                 * spaeter in cr_text_composite (Linse + Schatten) */
+                /* into the text layer (alpha = coverage); the fade-in happens
+                 * later in cr_text_composite (lens + shadow) */
                 if (fa > 255) fa = 255;
                 cr_tlayer[yd * BOOT_TW + xd] = (fa << 24)
                     | ((unsigned long)r << 16) | ((unsigned long)gg << 8)
@@ -554,40 +554,40 @@ static void cr_glyph_rot(int c, int cx, int cy, double ang, int cph, double sc)
         }
 }
 
-/* Lensflares: die Spritesheet-Animation blitzt an DREI wechselnden
- * hellen Stellen des Logos auf (2x skaliert, additiv, GRAU statt
- * blau: Max-Kanal als Helligkeit) */
+/* Lens flares: the spritesheet animation flashes at THREE changing
+ * bright spots of the logo (2x scaled, additive, GRAY instead of
+ * blue: max channel as brightness) */
 static void cr_flares(int t)
 {
-    /* Glanzstellen von KRALLEN und METALL im oberen Klauenband
-     * (y<115, roetlich, Umfeld >=75% opak - nie im All oder auf
-     * dem Schriftzug) */
+    /* highlights on CLAWS and METAL in the upper claw band
+     * (y<115, reddish, surroundings >=75% opaque - never in
+     * space or on the lettering) */
     static const short fp[9][2] = {
         {126, 49},{226,100},{210,  6},
         {294, 57},{104, 99},{191, 71},
         {195, 46},{293, 88},{168,101} };
-    /* GLOBALER Takt: genau EIN Blitz alle ~5s (= 3 je 15s), jede
-     * Animation laeuft komplett durch - nie zwei ueberlappend
-     * (ueberlappende Slots wirkten frueher "zu schnell") */
+    /* GLOBAL beat: exactly ONE flash per ~5s (= 3 per 15s), each
+     * animation runs fully through - never two overlapping
+     * (overlapping slots used to look "too fast") */
     {
-        /* nichtlineare Abspielkurve: Aufbau zuegig, die grossen,
-         * gut sichtbaren Frames deutlich laenger halten - sonst
-         * wirkt der Blitz je nach Untergrund "zu schnell" */
+        /* nonlinear playback curve: build up briskly, hold the big,
+         * clearly visible frames much longer - otherwise the
+         * flash looks "too fast" depending on the background */
         static const unsigned char lf_dur[13] =
             { 6, 6, 6, 6, 6, 14, 14, 14, 14, 14, 14, 14, 10 };
         int cyc = (t - 260 + 200) / 250;
         int ph  = (t - 260 + 200) % 250;
         int fr, pi, ax, ay, w, x, y, c, p, dly;
         const unsigned char *src;
-        if (t < 260) return;              /* erst wenn das Logo voll da ist */
-        dly = (cyc * 89 + ((cyc * 37) >> 1)) % 60;   /* leichte Streuung */
+        if (t < 260) return;              /* only when the logo is fully up */
+        dly = (cyc * 89 + ((cyc * 37) >> 1)) % 60;   /* slight scatter */
         ph -= dly;
         if (ph < 0) return;
         for (fr = 0; fr < LF_N && ph >= (int)lf_dur[fr]; ++fr)
             ph -= lf_dur[fr];
-        if (fr >= LF_N) return;           /* Pause bis zum naechsten Blitz */
-        /* Anker: Sprungweite 1..8 mod 9 -> nie zweimal hinter-
-         * einander dieselbe Stelle */
+        if (fr >= LF_N) return;           /* pause until the next flash */
+        /* anchor: jump width 1..8 mod 9 -> never the same spot
+         * twice in a row */
         p = 0;
         for (c = 1; c <= cyc; ++c)
             p += 1 + ((c * 7 + ((c * 11) >> 2)) % 8);
@@ -602,8 +602,8 @@ static void cr_flares(int t)
                 unsigned long a2;
                 int dx, dy;
                 if (!sp[3]) continue;
-                /* Original-Farbnuancen des Sheets beibehalten */
-                a2 = ((unsigned long)sp[3] * 3) >> 2;   /* ~75% Deckkraft */
+                /* keep the sheet's original color nuances */
+                a2 = ((unsigned long)sp[3] * 3) >> 2;   /* ~75% opacity */
                 for (dy = 0; dy < 2; ++dy)
                     for (dx = 0; dx < 2; ++dx) {
                         int px = ax - w + x * 2 + dx;
@@ -625,12 +625,12 @@ static void cr_flares(int t)
     }
 }
 
-/* Zentrierten Wellentext mit x-Versatz zeichnen; die Wellenphase haengt
- * an der ZIELposition, damit Ein-/Ausfahrt genauso schwingt wie der Stand */
+/* Draw centered wave text with x offset; the wave phase depends on
+ * the TARGET position, so entry/exit swings just like the resting state */
 static void cr_wave_text(const char *s, double off, double tf)
 {
     int wt = cr_text_w(s), i, cph = (int)(tf * 10.0);
-    double sc = (wt > 580) ? 580.0 / wt : 1.0;   /* breite Zeilen schrumpfen */
+    double sc = (wt > 580) ? 580.0 / wt : 1.0;   /* shrink wide lines */
     double bx = (BOOT_TW - wt * sc) / 2.0 + off;
     for (i = 0; s[i]; ++i) {
         double gw = cr_gw((unsigned char)s[i]) * sc;
@@ -639,9 +639,9 @@ static void cr_wave_text(const char *s, double off, double tf)
         int fx = 0, fy = 0;
         double fdreh = 0.0;
         if (cr_fluchtF > 0.0) {
-            /* jeder Buchstabe kennt seine Bahn: abwechselnd links/rechts
-             * hinaus, leicht gefaechert, mit Taumeln; Weite^2 = erst
-             * zoegern, dann stuerzen - rueckwaerts dieselbe Bahn heim */
+            /* every letter knows its path: alternately out left/right,
+             * slightly fanned, with tumbling; distance^2 = hesitate
+             * first, then plunge - back home the same path */
             double f2 = cr_fluchtF * cr_fluchtF;
             double seite = (i & 1) ? 1.0 : -1.0;
             double faecher = 0.65 + 0.45 * (double)((i * 37) % 13) / 13.0;
@@ -656,8 +656,8 @@ static void cr_wave_text(const char *s, double off, double tf)
     }
 }
 
-/* Textzeile mit Stern-Ornament (Stern, Text, Stern) ausgeben; eine reine
- * Sternenzeile bleibt roh */
+/* Output a text line with star ornament (star, text, star); a pure
+ * star line stays raw */
 static void cr_wave_deco(const char *s, double off, double tf)
 {
     char buf[80];
@@ -666,30 +666,30 @@ static void cr_wave_deco(const char *s, double off, double tf)
     cr_wave_text(buf, off, tf);
 }
 
-/* Fliegendes Monster: Ellipsenbahn ums Logo, hinten klein/dunkler, vorn
- * gross; 3 Fluegelschlag-Frames (0,1,2,1). Vorn wirft es einen weichen,
- * halbtransparenten Schatten auf das Logo (nur auf Logopixeln).
- * dive: 0 = auf der Bahn .. 1 = ganz unten vor dem Scrolltext. */
+/* Flying monster: elliptical path around the logo, small/darker at the
+ * back, large in front; 3 wing beat frames (0,1,2,1). In front it casts
+ * a soft, semi-transparent shadow on the logo (only on logo pixels).
+ * dive: 0 = on the path .. 1 = fully down before the scroll text. */
 static void cr_monster_prog(double tf, double *turns_out, int *dir_out,
                             int *hover_out, double *dv_out)
 {
-    /* Flugprogramm (Schleife, 46 s): Richtung +1/-1, Umlaufanteil,
-     * danach 3 s vorn schweben (hover). dive: danach ABSTECHER nach
-     * unten vor den Scrolltext (2 s runter, 5 s stehen - dort spiegelt
-     * ihn der Boden -, 2 s hoch), dann normal weiter. Rueckwaerts-
-     * Segmente bringen ihn von LINKS nach vorn. Umlauf = 400 Frames. */
+    /* Flight program (loop, 46 s): direction +1/-1, lap fraction,
+     * then hover in front for 3 s. dive: afterwards a DETOUR down
+     * in front of the scroll text (2 s down, 5 s standing - there the
+     * floor mirrors him -, 2 s up), then on as usual. Backward
+     * segments bring him from LEFT to the front. Lap = 400 frames. */
     static const struct { int dir; double turns; int hover; int dive; } prog[5] = {
-        {  1, 0.16, 1, 0 },   /* -> vorn RECHTS (ueber P/H) schweben        */
-        {  1, 1.20, 1, 1 },   /* Runde, vorn LINKS schweben, dann ABTAUCHEN */
-        {  1, 0.39, 0, 0 },   /* weiter zur Rueckseite                      */
-        { -1, 0.50, 1, 0 },   /* rueckwaerts ueber links -> MITTE schweben  */
-        { -1, 1.25, 0, 0 } }; /* Rueckwaertsrunde (nochmal von links)       */
+        {  1, 0.16, 1, 0 },   /* -> hover in front RIGHT (over P/H)         */
+        {  1, 1.20, 1, 1 },   /* Lap, hover in front LEFT, then DIVE DOWN */
+        {  1, 0.39, 0, 0 },   /* on to the back side                        */
+        { -1, 0.50, 1, 0 },   /* backwards via left -> hover CENTER         */
+        { -1, 1.25, 0, 0 } }; /* backward lap (again from the left)         */
     const double LAP = 400.0, HOV = 150.0, DDN = 100.0, DLOW = 250.0;
     double u = tf - 160.0, turns = 0.0, dv = 0.0;
     int k, hover = 0, dir = 1;
     if (u < 0.0) u = 0.0;
-    u = fmod(u, 2300.0);                  /* 3.5 Umlaeufe + 3 Schwebephasen
-                                           * + Abstecher (450) */
+    u = fmod(u, 2300.0);                  /* 3.5 laps + 3 hover phases
+                                           * + detour (450) */
     for (k = 0; k < 5; ++k) {
         double dur = prog[k].turns * LAP;
         dir = prog[k].dir;
@@ -699,7 +699,7 @@ static void cr_monster_prog(double tf, double *turns_out, int *dir_out,
             if (u < HOV) { hover = 1; break; }
             u -= HOV;
         }
-        if (prog[k].dive) {               /* runter - stehen - hoch, weich
+        if (prog[k].dive) {               /* down - stand - up, smooth
                                            * (Smoothstep) */
             double e;
             hover = 1;
@@ -715,10 +715,10 @@ static void cr_monster_prog(double tf, double *turns_out, int *dir_out,
     *turns_out = turns; *dir_out = dir; *hover_out = hover; *dv_out = dv;
 }
 
-/* Einmal je Frame: Fluchtphase der Scroller-Buchstaben aus dem
- * Flugprogramm ableiten. Abtauchen (dv steigt) = Abflug mit dv;
- * unten stehen = 1,2 s leere Buehne, dann kehren sie in 3 s zurueck,
- * waehrend er zusieht; Auftauchen und Normalflug = alle daheim. */
+/* Once per frame: derive the escape phase of the scroller letters
+ * from the flight program. Diving (dv rises) = departure with dv;
+ * standing below = 1.2 s of empty stage, then they return in 3 s,
+ * while he watches; surfacing and normal flight = all back home. */
 static void cr_flucht_takt(double tf)
 {
     double turns, dv;
@@ -749,12 +749,12 @@ static void cr_monster_pos(double tf, int *cx, int *cy, double *sc, int *front,
 static int cr_seq_cycle(void);
 static void cr_rock_carry(double tf, double *rx, double *ry, double *rsc);
 
-/* Finale-Zeitplan einmalig festlegen (deterministisch aus Textsequenz
- * und Flugprogramm): cr_tend = erster Frame nach der Textsequenz, in dem
- * der Daemon frei auf der Bahn fliegt (kein Hover/Abstecher); von dort
- * fliegt er in seiner Richtung weiter bis zum Rueckpunkt hinter dem
- * Logo (turns = 0.75 mod 1), holt den Stein, kommt ueber rechts nach
- * vorn (0.75 -> 1.25), haelt, laesst los. Aufprall aus der Fallformel. */
+/* Set the finale schedule once (deterministic from text sequence and
+ * flight program): cr_tend = first frame after the text sequence in
+ * which the demon flies freely on its path (no hover/detour); from
+ * there he keeps flying in his direction to the return point behind
+ * the logo (turns = 0.75 mod 1), grabs the rock, comes via right to the
+ * front (0.75 -> 1.25), holds, lets go. Impact from the fall formula. */
 static void cr_finale_init(void)
 {
     double t, turns, dv, dist, sc, dive;
@@ -770,18 +770,18 @@ static void cr_finale_init(void)
     dist = (dir > 0) ? fmod(0.75 - turns + 10.0, 1.0) : fmod(turns - 0.75 + 10.0, 1.0);
     cr_tA = dist * 400.0;
     cr_tdrop = cr_tend + cr_tA + CR_FIN_B + CR_FIN_C + CR_FIN_D;
-    cr_fin_ready = 1;                     /* vor dem Aufruf: kein Rekursionsloop */
-    cr_rock_carry(cr_tdrop, &cr_rx0, &cr_ry0, &sc);   /* Loslasspunkt = Krallen */
+    cr_fin_ready = 1;                     /* before the call: no recursion loop */
+    cr_rock_carry(cr_tdrop, &cr_rx0, &cr_ry0, &sc);   /* release point = claws */
     (void)cx; (void)cy; (void)front; (void)dive;
-    cr_timp = cr_tdrop + sqrt(2.0 * (331.0 - cr_ry0) / CR_ROCK_G);   /* Unterkante
-                                                                   * trifft CR_ML */
+    cr_timp = cr_tdrop + sqrt(2.0 * (331.0 - cr_ry0) / CR_ROCK_G);   /* bottom edge
+                                                                   * hits CR_ML */
 }
 
 static int cr_finale_done(double tf)
 {
     cr_finale_init();
-    /* fertig, wenn alles gewischt ist (Notbremse: 30 s nach Wischstart,
-     * bei aufgenommenem Pfad dessen Laenge + 20 s) */
+    /* done when everything is wiped (failsafe: 30 s after wipe start,
+     * with a recorded path its length + 20 s) */
     return cr_wp == 4 || tf >= cr_timp + CR_WIPE_START + 1500.0
                          + ((CR_WPATH_N > 0) ? (double)CR_WPATH_N : 0.0);
 }
@@ -792,15 +792,15 @@ static void cr_monster_pos(double tf, int *cx, int *cy, double *sc, int *front,
     double turns, th, sn, dv = 0.0;
     int hover = 0, dir;
     cr_finale_init();
-    if (tf >= cr_tend) {                  /* FINALE-Bahn */
+    if (tf >= cr_tend) {                  /* FINALE path */
         double te = tf - cr_tend;
         if (te < cr_tA)                       turns = cr_turns0 + cr_dir0 * te / 400.0;
-        else if (te < cr_tA + CR_FIN_B)       turns = 0.75;   /* hinter dem Logo */
+        else if (te < cr_tA + CR_FIN_B)       turns = 0.75;   /* behind the logo */
         else if (te < cr_tA + CR_FIN_B + CR_FIN_C)
             turns = 0.75 + 0.5 * (te - cr_tA - CR_FIN_B) / CR_FIN_C;
-        else { turns = 1.25; hover = 1; }     /* vorn, Logomitte, halten */
+        else { turns = 1.25; hover = 1; }     /* front, logo mid, hold */
         if (tf >= cr_timp + CR_LAUGH_AT && tf < cr_timp + CR_LAUGH_AT + 100.0) {
-            /* Lachen: schnelles Wippen (Sample ~2 s) */
+            /* laughter: fast bobbing (sample ~2 s) */
             double lt = tf - cr_timp - CR_LAUGH_AT;
             *cy = (int)(sin(lt * 0.9) * 3.0);
             *cx = (int)(sin(lt * 0.6) * 2.0);
@@ -809,35 +809,35 @@ static void cr_monster_pos(double tf, int *cx, int *cy, double *sc, int *front,
         cr_monster_prog(tf, &turns, &dir, &hover, &dv);
         *cx = *cy = 0;
     }
-    th = turns * 6.283185307179586;     /* exakt: vorn sn = 1.0, sc = 1.0 */
+    th = turns * 6.283185307179586;     /* exact: near sn = 1.0, sc = 1.0 */
     sn = sin(th);
-    /* (+=: cx und cy tragen ggf. schon das Lach-Wippen des Finales) */
-    *cx += (int)(320.0 + 290.0 * cos(th));  /* Seitenpunkt liegt NEBEN dem Logo:
-                                             * Wechsel vorn/hinten ohne Ueberlappung */
-    *cy += (int)(118.0 + 34.0 * sn);  /* tiefster Punkt bleibt klar ueber dem Scrolltext */
-    *sc = 0.50 + 0.50 * (sn + 1.0) * 0.5;             /* 0.5 hinten .. 1.0 vorn
-                                                        * (Quelle = Maximalgroesse) */
+    /* (+=: cx and cy may already carry the finale's laugh bob) */
+    *cx += (int)(320.0 + 290.0 * cos(th));  /* side point lies BESIDE the logo:
+                                             * switch front/back without overlap */
+    *cy += (int)(118.0 + 34.0 * sn);  /* lowest point stays well above the scroll text */
+    *sc = 0.50 + 0.50 * (sn + 1.0) * 0.5;             /* 0.5 back .. 1.0 front
+                                                        * (source = maximum size) */
     *front = (sn > 0.0);
-    if (dv > 0.0) {                       /* Abstecher: geradlinig vom
-                                           * Bahnpunkt zum Tiefpunkt (Mitte,
-                                           * Fuesse knapp UEBER der Spiegel-
-                                           * kante: der Bob (+-3 px) darf sie
-                                           * nicht in den Boden druecken) */
+    if (dv > 0.0) {                       /* detour: straight from the path
+                                           * point to the low point (center,
+                                           * feet just ABOVE the mirror edge:
+                                           * the bob (+-3 px) must not push
+                                           * them into the floor) */
         *cx = (int)(*cx + (320.0 - *cx) * dv);
         *cy = (int)(*cy + ((double)(CR_ML - MN_H / 2 - 3) - *cy) * dv);
         *sc += (1.0 - *sc) * dv;
         *front = 1;
     }
-    if (hover) {                           /* schwebt: leichtes Auf-und-ab */
+    if (hover) {                           /* hovers: slight up-and-down */
         *cy += (int)(sin(tf * 0.08) * 4.0);
         *cx += (int)(sin(tf * 0.05) * 3.0);
     }
     *dive = dv;
 }
 
-/* RGBA-Sprite bilinear/premultipliziert skaliert blitten (wie der
- * Daemon); mirror=1: gestuerzt unter die Spiegelkante, mit der Tiefe
- * verblassend (fuer den fallenden Stein ueber dem Boden). */
+/* Blit RGBA sprite scaled bilinear/premultiplied (like the
+ * demon); mirror=1: flipped below the mirror edge, fading with
+ * depth (for the falling rock above the floor). */
 static void cr_blit_rgba(const unsigned char *img, int iw, int ih, double cxr,
                          double cyr, double sc, int mirror, int am)
 {
@@ -876,7 +876,7 @@ static void cr_blit_rgba(const unsigned char *img, int iw, int ih, double cxr,
                 fa = fa * (unsigned long)(42 - (yd - CR_ML)) / 42UL;
                 fa = fa * 120UL >> 8;
             }
-            fa = fa * (unsigned long)am >> 8;   /* Gesamtdeckung (Einblenden) */
+            fa = fa * (unsigned long)am >> 8;   /* Overall opacity (fade in) */
             if (!fa) continue;
             fa += fa >> 7;
             d = &bpix[yd * BOOT_TW + px];
@@ -888,22 +888,22 @@ static void cr_blit_rgba(const unsigned char *img, int iw, int ih, double cxr,
         }
 }
 
-/* Stein in den Fusskrallen: haengt an der FUSSHOEHE des aktuellen
- * Fluegelschlag-Frames (Fuesse enden in Zeile 148 / 151 / 144 der drei
- * Frames), geht also beim Schweben mit den Krallen rauf und runter */
+/* Rock in the foot claws: tied to the FOOT HEIGHT of the current
+ * wing beat frame (feet end at line 148 / 151 / 144 of the three
+ * frames), so it moves up and down with the claws while hovering */
 static void cr_rock_carry(double tf, double *rx, double *ry, double *rsc)
 {
     static const int foot[3] = { 148, 151, 144 };
     int cx, cy, front, fr = ((int)(tf / 8.0)) & 3;
     double sc, dive;
-    if (fr == 3) fr = 1;                  /* 0,1,2,1 wie cr_monster_draw */
+    if (fr == 3) fr = 1;                  /* 0,1,2,1 as cr_monster_draw */
     cr_monster_pos(tf, &cx, &cy, &sc, &front, &dive);
-    *rx = cx + 2.0;                       /* halbe Fusshoehen-Bewegung: subtil */
+    *rx = cx + 2.0;                       /* half foot-height motion: subtle */
     *ry = cy + (95.0 + 0.5 * (double)(foot[fr] - 151)) * sc;
     *rsc = sc;
 }
 
-/* Stein: in den Krallen (ab Phase C), dann frei fallend. 1 = sichtbar */
+/* Rock: in the claws (from phase C), then free-falling. 1 = visible */
 static int cr_rock_pos(double tf, double *rx, double *ry, double *rsc)
 {
     double te;
@@ -915,15 +915,15 @@ static int cr_rock_pos(double tf, double *rx, double *ry, double *rsc)
     return (*ry < BOOT_TH + 40.0);
 }
 
-/* Stein blendet hinter dem Logo ueber 30 Frames ein (das Logo hat dort
- * ein kleines Loch - kein Aufpoppen) */
+/* Rock fades in behind the logo over 30 frames (the logo has a
+ * small hole there - no popping in) */
 static int cr_rock_alpha(double tf)
 {
     double a = (tf - (cr_tend + cr_tA + CR_FIN_B)) * 256.0 / 30.0;
     return (a >= 256.0) ? 256 : (a <= 0.0) ? 0 : (int)a;
 }
 
-/* Pseudozufall 0..1 aus Index (deterministisch, headless-gleich) */
+/* Pseudo-random 0..1 from index (deterministic, same headless) */
 static double cr_rnd(unsigned long k)
 {
     k ^= k >> 13; k = (k * 0x5BD1E995UL) & 0xFFFFFFFFUL; k ^= k >> 15;
@@ -931,11 +931,11 @@ static double cr_rnd(unsigned long k)
     return (double)(k & 0xFFFFUL) / 65536.0;
 }
 
-/* Spiegelbruch: Spiegelstreifen (Zeilen CR_ML..399) einfrieren und in
- * Voronoi-Zellen um zufaellige Keime zerlegen, dicht um die Aufprall-
- * stelle (kleine Splitter), nach aussen groeber. Jede Scherbe bekommt
- * eine radiale Geschwindigkeit (nah schnell, fern langsam), einen
- * Aufwaertsimpuls und eine Drehung; Flug analytisch (kein Integrieren). */
+/* Mirror break: freeze the mirror strip (lines CR_ML..399) and split
+ * it into Voronoi cells around random seeds, dense around the impact
+ * point (small shards), coarser outward. Each shard gets a radial
+ * velocity (near fast, far slow), an upward impulse and a rotation;
+ * flight is analytic (no integration). */
 static void cr_shatter_init(void)
 {
     static int sxs[CR_NSH], sys[CR_NSH];
@@ -955,8 +955,8 @@ static void cr_shatter_init(void)
         for (x = 0; x < BOOT_TW; ++x) {
             long best = 0x7FFFFFFFL; int bi = 0;
             for (i = 0; i < CR_NSH; ++i) {
-                long dx = x - sxs[i], dy = (y - sys[i]) * 3;   /* Zellen breiter
-                                                               * als hoch */
+                long dx = x - sxs[i], dy = (y - sys[i]) * 3;   /* Cells wider than
+                                                               * tall */
                 long d = dx * dx + dy * dy;
                 if (d < best) { best = d; bi = i; }
             }
@@ -967,9 +967,9 @@ static void cr_shatter_init(void)
             if (y < cr_sh[bi].y0) cr_sh[bi].y0 = y;
             if (y > cr_sh[bi].y1) cr_sh[bi].y1 = y;
         }
-    /* Risse: Zellgrenzen im Schnappschuss abdunkeln - schon im ersten
-     * Bruch-Frame ein Sprungmuster, nicht erst wenn die Scherben
-     * auseinanderdriften */
+    /* Cracks: darken cell borders in the snapshot - a crack pattern
+     * already in the first break frame, not only once the shards
+     * drift apart */
     for (y = 0; y < BOOT_TH - CR_ML; ++y)
         for (x = 0; x < BOOT_TW; ++x) {
             int id = cr_shid[y * BOOT_TW + x], edge = 0;
@@ -999,7 +999,7 @@ static void cr_shatter_init(void)
     }
     cr_broken = 1;
     sound_play(SND_GLASS);
-    sound_mod_fade(150);                  /* Musik geht mit dem Spiegel */
+    sound_mod_fade(150);                  /* Music goes with the mirror */
 }
 
 static void cr_shards_draw(double tf)
@@ -1016,12 +1016,12 @@ static void cr_shards_draw(double tf)
         unsigned long fa = (unsigned long)(al * 256.0), fl = (unsigned long)(flash * 180.0);
         if (cr_sh[i].x1 < 0) continue;
         px0 = cr_sh[i].mx + cr_sh[i].vx * t;
-        py0 = cr_sh[i].my + cr_sh[i].vy * t + 0.5 * 0.05 * t * t;   /* sanfte
-                                                                 * Schwerkraft:
-                                                                 * Scherben bleiben
-                                                                 * ~2 s im Bild */
+        py0 = cr_sh[i].my + cr_sh[i].vy * t + 0.5 * 0.05 * t * t;   /* gentle
+                                                                 * gravity:
+                                                                 * shards stay
+                                                                 * ~2 s in view */
         a = cr_sh[i].w * t; cs = cos(a); sn = sin(a);
-        /* Zielbox: gedrehte Quellbox um den Schwerpunkt */
+        /* Target box: source box rotated about centroid */
         for (k = 0; k < 4; ++k) {
             double qx = ((k & 1) ? cr_sh[i].x1 + 1 : cr_sh[i].x0) - cr_sh[i].mx;
             double qy = ((k >> 1) ? cr_sh[i].y1 + 1 : cr_sh[i].y0) + CR_ML - cr_sh[i].my;
@@ -1042,7 +1042,7 @@ static void cr_shards_draw(double tf)
                 unsigned long r0, g0, b0, cr, cg, cb;
                 if (x < 0 || x >= BOOT_TW || y < 0 || y >= BOOT_TH) continue;
                 dx = x + 0.5 - px0; dy = y + 0.5 - py0;
-                sx = cr_sh[i].mx + dx * cs + dy * sn;          /* inverse Drehung */
+                sx = cr_sh[i].mx + dx * cs + dy * sn;          /* inverse rotate */
                 sy = cr_sh[i].my - dx * sn + dy * cs - CR_ML;
                 isx = (int)floor(sx); isy = (int)floor(sy);
                 if (isx < 0 || isx >= BOOT_TW || isy < 0 || isy >= BOOT_TH - CR_ML) continue;
@@ -1061,8 +1061,8 @@ static void cr_shards_draw(double tf)
     }
 }
 
-/* mode: 0 = Sprite (endet an der Spiegelkante), 1 = Schatten aufs Logo,
- * 2 = Bodenspiegelung (gestuerzt unter CR_ML, wie der Spiegeltext) */
+/* mode: 0 = sprite (ends at the mirror edge), 1 = shadow on the logo,
+ * 2 = floor reflection (flipped below CR_ML, like the mirror text) */
 static void cr_monster_draw(double tf, int mode)
 {
     int cx, cy, front, fr, x, y, a, cph = (int)(tf * 10.0);
@@ -1071,17 +1071,17 @@ static void cr_monster_draw(double tf, int mode)
     int w, h, x0, y0;
     if (tf < 160.0) return;
     cr_monster_pos(tf, &cx, &cy, &sc, &front, &dive);
-    a = (int)((tf - 160.0) * 8.0); if (a > 256) a = 256;   /* einblenden */
-    d01 = (sc - 0.5) / 0.5;               /* 0 = ganz hinten .. 1 = ganz vorn */
+    a = (int)((tf - 160.0) * 8.0); if (a > 256) a = 256;   /* fade in */
+    d01 = (sc - 0.5) / 0.5;               /* 0 = far back .. 1 = far front */
     fr = ((int)(tf / 8.0)) & 3; if (fr == 3) fr = 1;       /* 0,1,2,1 */
     img = mn_rgba[fr];
     w = (int)(MN_W * sc); h = (int)(MN_H * sc);
     x0 = cx - w / 2; y0 = cy - h / 2;
-    if (mode == 2 && y0 + h < CR_ML - 84) return;   /* zu weit ueber dem Boden */
-    if (mode == 1) {                      /* Schatten: versetzt, nur aufs Logo,
-                                           * GROESSER als das Sprite (Lichtquelle
-                                           * nah) und weich */
-        double ss = sc * 1.3;             /* Schattensilhouette 30% groesser */
+    if (mode == 2 && y0 + h < CR_ML - 84) return;   /* too far above the floor */
+    if (mode == 1) {                      /* Shadow: offset, only onto the logo,
+                                           * BIGGER than the sprite (light source
+                                           * close) and soft */
+        double ss = sc * 1.3;             /* Shadow silhouette 30% bigger */
         int ws = (int)(MN_W * ss), hs = (int)(MN_H * ss);
         int xs0 = cx - ws / 2 + 24, ys0 = cy - hs / 2 + 34;
         if (!front) return;
@@ -1094,7 +1094,7 @@ static void cr_monster_draw(double tf, int mode)
                 if (lx < 0 || lx >= CL_W || ly < 0 || ly >= CL_H) continue;
                 la = cl_rgba[(ly * CL_W + lx) * 4 + 3];
                 if (la < 128) continue;
-                /* weiche Kante: 5x5-Mittel der Sprite-Alpha */
+                /* soft edge: 5x5 mean of the sprite alpha */
                 for (k = 0; k < 25; ++k) {
                     int sx = (int)((x + (k % 5) - 2) / ss), sy = (int)((y + k / 5 - 2) / ss);
                     if (sx >= 0 && sx < MN_W && sy >= 0 && sy < MN_H)
@@ -1102,9 +1102,9 @@ static void cr_monster_draw(double tf, int mode)
                 }
                 fa = (unsigned long)(sa / 25) * 150UL >> 8;       /* max ~58% */
                 fa = fa * (unsigned long)a >> 8;
-                /* Schatten blendet zum Seitenpunkt hin aus (kein Poppen)
-                 * und beim Abstecher nach unten (unter dem Logo faellt
-                 * kein Schatten mehr aufs Logo) */
+                /* Shadow fades out toward the side point (no popping)
+                 * and on the downward detour (below the logo no shadow
+                 * falls onto the logo any more) */
                 fa = fa * (unsigned long)(d01 > 0.5 ? (d01 - 0.5) * 512.0 : 0.0) >> 8;
                 fa = fa * (unsigned long)((1.0 - dive) * 256.0) >> 8;
                 if (!fa) continue;
@@ -1115,20 +1115,20 @@ static void cr_monster_draw(double tf, int mode)
             }
         return;
     }
-    /* Sprite: BILINEAR mit premultiplizierter Alpha abtasten - bei
-     * stetig wechselndem Massstab zittern sonst helle Details
-     * (Augen, Zaehne), weil Nearest je Frame andere Texel trifft */
-    /* Spiegelbild (mode 2): der Boden ist nur 42 Zeilen tief, das
-     * Sprite aber 152 - 1:1 zeigte nur die dunkelblauen Beine (auf dem
-     * blauen Boden unsichtbar). Darum 2:1 gestaucht: die unteren ~84
-     * Zeilen (Beine, Bauch, Maul) erscheinen gestuerzt unter der Kante,
-     * mit der Tiefe verblassend, gleiches Kraeuseln wie der Spiegeltext */
+    /* Sprite: sample BILINEAR with premultiplied alpha - with a
+     * continuously changing scale, bright details (eyes, teeth)
+     * would jitter, as Nearest hits other texels each frame */
+    /* Reflection (mode 2): the floor is only 42 lines deep, but
+     * the sprite is 152 - 1:1 showed only the dark blue legs
+     * (invisible on the blue floor). So squashed 2:1: the lower
+     * ~84 lines (legs, belly, jaw) appear flipped below the edge,
+     * fading with depth, same ripple as the mirror text */
     for (y = 0; y < ((mode == 2) ? BOOT_TH - CR_ML : h); ++y) {
         int ys = y, depth = 0;
         unsigned long rf = 256;
         if (mode == 2) {
             depth = y;
-            ys = CR_ML - 1 - 2 * depth - y0;        /* Quellzeile im Sprite */
+            ys = CR_ML - 1 - 2 * depth - y0;        /* sprite source line */
             if (ys < 0 || ys >= h) continue;
             rf = (unsigned long)(200.0 * pow(1.0 - depth / 42.0, 0.7));
         }
@@ -1138,7 +1138,7 @@ static void cr_monster_draw(double tf, int mode)
             double fx, fy, rs = 0.0, gs = 0.0, bs = 0.0, as = 0.0;
             unsigned long fa, r0, g0, b0, dim, cr, cg, cb;
             Uint32 *d;
-            /* nichts fliegt in den Spiegel: Sprite endet an der Kante */
+            /* nothing flies into the mirror: sprite ends at the edge */
             if (px < 0 || px >= BOOT_TW || py < 0 || py >= CR_ML) continue;
             if (mode == 2) {
                 yd = CR_ML + depth;
@@ -1159,10 +1159,10 @@ static void cr_monster_draw(double tf, int mode)
             cr = (unsigned long)(rs / as); cg = (unsigned long)(gs / as);
             cb = (unsigned long)(bs / as);
             fa = (unsigned long)as * (unsigned long)a >> 8;
-            fa = fa * rf >> 8;            /* Spiegel: Tiefenverblassen */
+            fa = fa * rf >> 8;            /* mirror: depth fade */
             if (!fa) continue;
-            dim = 150UL + (unsigned long)(106.0 * d01);   /* Tiefe: kontinuierlich
-                                                          * hell (vorn) -> dunkel */
+            dim = 150UL + (unsigned long)(106.0 * d01);   /* Depth: continuously
+                                                          * light (front) -> dark */
             d = &bpix[yd * BOOT_TW + xd];
             r0 = (*d >> 16) & 0xFF; g0 = (*d >> 8) & 0xFF; b0 = *d & 0xFF;
             r0 = (r0 * (256 - fa) + ((cr * dim >> 8)) * fa) >> 8;
@@ -1173,7 +1173,7 @@ static void cr_monster_draw(double tf, int mode)
     }
 }
 
-/* Credits-Textsequenz (einmalig, kein Loop): Anzeige-Dauer je Zeile */
+/* Credits text sequence (once, no loop): display time per line */
 static const struct { const char *s; int hold; } cr_seq[] = {
     { "CREDITS:",           250 },
     { "RED SECTOR, SANITY", 150 },
@@ -1189,10 +1189,10 @@ static const struct { const char *s; int hold; } cr_seq[] = {
     { "MIDWAY FOR ORIGINAL", 150 },
     { "COMMODORE FOR GORF-C64", 150 },
     { "CLAUDE FOR CODING",  150 },
-    { "****************",    150 } };      /* Sternenzeile (Sternglyphen) */
+    { "****************",    150 } };      /* star line (star glyphs) */
 #define CR_NSEQ ((int)(sizeof(cr_seq) / sizeof(cr_seq[0])))
-#define CR_SEQ_E 150                          /* Ein-/Ausfahrt Frames */
-#define CR_SEQ_V 5                            /* px je Frame */
+#define CR_SEQ_E 150                          /* entry/exit frames */
+#define CR_SEQ_V 5                            /* px/frame */
 static int cr_seq_cycle(void)
 {
     int k, c = 0;
@@ -1200,19 +1200,19 @@ static int cr_seq_cycle(void)
     return c;
 }
 
-/* Scrolltext-Ebene einblenden. Beim Abstecher wirkt der Daemon wie eine
- * GLASKUGEL (Sphere-Effekt, Nutzerwunsch: "der Scroller quellt um den
- * Daemon herum / sucht einen Ausweg"): innerhalb eines Kreises um ihn
- * wird die Ebene radial vergroessert abgetastet (Mitte bis 2x, Rand
- * nahtlos 1:1); Staerke waechst mit dive. Unter der Spiegelkante
- * dasselbe mit dem gespiegelten Kugelmittelpunkt. Der Daemon selbst
- * steht HINTER dem verzerrten Text (Nutzer: "das kommt besser").
- * In der Kugel schimmert die Schrift ROETLICH (Gruen/Blau gedaempft,
- * Rot angehoben), wird deutlich durchscheinend (bis ~40% Deckung in
- * der Mitte) und bekommt MOTION BLUR: die Ebene wird entlang der
- * Scrollrichtung (x) ueber bis zu +-8 px gemittelt, Schweif waechst
- * zur Kugelmitte hin - alles mit derselben Huellkurve wie die
- * Verzerrung, also nahtlos am Kugelrand. */
+/* Fade in the scroll text layer. On the detour the demon acts like
+ * a GLASS BALL (sphere effect, user request: "the scroller wells
+ * up around the demon / seeks a way out"): inside a circle around
+ * him the layer is sampled radially magnified (center up to 2x,
+ * edge seamlessly 1:1); strength grows with dive. Below the mirror
+ * edge the same with the mirrored ball center. The demon himself
+ * stands BEHIND the distorted text (user: "that comes off better").
+ * In the ball the type shimmers REDDISH (green/blue damped, red
+ * raised), becomes clearly translucent (up to ~40% opacity at the
+ * center) and gets MOTION BLUR: the layer is averaged along the
+ * scroll direction (x) over up to +-8 px, the trail grows toward
+ * the ball center - all with the same envelope as the distortion,
+ * hence seamless at the ball edge. */
 static void cr_text_composite(double tf)
 {
     int cx, cy, front, x, y;
@@ -1222,7 +1222,7 @@ static void cr_text_composite(double tf)
     rad = 118.0 * sc; rad2 = rad * rad;
     amp = 0.5 * dive;
     for (y = CR_TY0; y < BOOT_TH; ++y) {
-        int ccy = (y < CR_ML) ? cy : 2 * CR_ML - cy;   /* Kugel / Spiegelkugel */
+        int ccy = (y < CR_ML) ? cy : 2 * CR_ML - cy;   /* ball / mirror ball */
         for (x = 0; x < BOOT_TW; ++x) {
             double sx = x, sy = y, r2 = rad2;
             unsigned long al, cr, cg, cb, r0, g0, b0;
@@ -1235,19 +1235,19 @@ static void cr_text_composite(double tf)
                     sx = cx + dx * g; sy = ccy + dy * g;
                 }
             }
-            if (r2 >= rad2) {             /* ausserhalb der Kugel: 1:1 */
+            if (r2 >= rad2) {             /* outside the ball: 1:1 */
                 Uint32 c = cr_tlayer[y * BOOT_TW + x];
                 al = c >> 24;
                 if (!al) continue;
                 cr = (c >> 16) & 0xFF; cg = (c >> 8) & 0xFF; cb = c & 0xFF;
-            } else {                      /* in der Kugel: bilinear, alpha-
-                                           * gewichtet, entlang x ueber den
-                                           * Blur-Schweif gemittelt */
-                double e = (1.0 - r2 / rad2) * dive;   /* 0 Rand .. 1 Mitte */
-                int taps = 1 + (int)(e * 8.0), t;      /* 1..9 Abtastungen */
+            } else {                      /* in the ball: bilinear, alpha-
+                                           * weighted, averaged along x
+                                           * over the blur trail */
+                double e = (1.0 - r2 / rad2) * dive;   /* 0 rim .. 1 center */
+                int taps = 1 + (int)(e * 8.0), t;      /* 1..9 samples */
                 double as = 0.0, rs = 0.0, gs = 0.0, bs = 0.0, wsum = 0.0;
                 for (t = 0; t < taps; ++t) {
-                    /* Schweif symmetrisch um die Linsenposition, Schritt 2px */
+                    /* trail symmetric about the lens position, step 2px */
                     double ox = (taps > 1) ? (t - (taps - 1) * 0.5) * 2.0 : 0.0;
                     double lx = sx + ox;
                     int ix = (int)floor(lx), iy = (int)floor(sy), k;
@@ -1271,14 +1271,14 @@ static void cr_text_composite(double tf)
                 if (as < 0.5) continue;
                 cr = (unsigned long)(rs / as); cg = (unsigned long)(gs / as);
                 cb = (unsigned long)(bs / as);
-                al = (unsigned long)(as / wsum);        /* Blur-Mittel */
+                al = (unsigned long)(as / wsum);        /* blur mean */
                 if (al > 255) al = 255;
-                {   /* Glas: roetlicher Schimmer + Transparenz */
+                {   /* glass: reddish shimmer + transparency */
                     unsigned long ei = (unsigned long)(e * 256.0);
-                    cr = cr + (((255 - cr) * ei * 120UL) >> 16);  /* Rot hoch */
-                    cg = cg * (65536UL - ei * 140UL) >> 16;       /* Gruen runter */
-                    cb = cb * (65536UL - ei * 160UL) >> 16;       /* Blau runter */
-                    al = al * (256UL - ei * 155UL / 256UL) >> 8;  /* bis ~40% */
+                    cr = cr + (((255 - cr) * ei * 120UL) >> 16);  /* red up */
+                    cg = cg * (65536UL - ei * 140UL) >> 16;       /* green down */
+                    cb = cb * (65536UL - ei * 160UL) >> 16;       /* blue down */
+                    al = al * (256UL - ei * 155UL / 256UL) >> 8;  /* max ~40% */
                 }
             }
             if (al > 255) al = 255;
@@ -1300,12 +1300,12 @@ static double cr_smooth(double u)
     return u * u * (3.0 - 2.0 * u);
 }
 
-/* Schwammabdruck an (sx,sy) in die Wischmaske stempeln: die VOLLE
- * Schwammflaeche (auch der von den Fingern verdeckte Teil) als Ellipse
- * ueber der Schwamm-Bbox des Sprites (AR_SPEX/Y, AR_SPRX/Y aus dem
- * Header), plattgedrueckt einen Hauch groesser.
- * PIXELIG: auf ein 4x4-Raster quantisiert (ganze Zellen, deren Mitte in
- * der Ellipse liegt) - es ist Pixelgrafik, keine weiche Kante (Nutzer) */
+/* Stamp the sponge footprint at (sx,sy) into the wipe mask: the FULL
+ * sponge area (including the part hidden by the fingers) as an ellipse
+ * over the sprite's sponge bbox (AR_SPEX/Y, AR_SPRX/Y from the
+ * header), flattened a touch bigger.
+ * PIXELY: quantized to a 4x4 grid (whole cells whose center lies
+ * in the ellipse) - it is pixel art, not a soft edge (user) */
 #define CR_WCELL 4
 static void cr_wipe_stamp(double sx, double sy)
 {
@@ -1325,15 +1325,15 @@ static void cr_wipe_stamp(double sx, double sy)
     }
 }
 
-/* Naechstgelegenen ungewischten Pixel zu (px,py) suchen (Raster 4, dann
- * Feinsuche fuer Raender): 1 = gefunden. Menschlich: erst, was in der
- * Naehe uebrig ist */
-/* Reservat: das absichtlich stehen gelassene Monsterstueck (Kopf und
- * Oberkoerper des Daemons vorn in der Logomitte). Die Striche wischen
- * DRUMHERUM (Sperrzone = Reservat + Schwammradius + Schrubbamplitude
- * fuer die Schwammmitte: x 138..442, y 26..259); beim Nachputzen wird
- * erst alles ausserhalb der Sperrzone gewischt, das Monster samt Rand
- * ganz zum Schluss */
+/* Find the nearest unwiped pixel to (px,py) (grid 4, then a fine
+ * search for edges): 1 = found. Human-like: first take whatever
+ * is left nearby */
+/* Reservation: the deliberately spared monster piece (head and upper
+ * body of the demon, at the front in the logo center). The strokes
+ * wipe AROUND it (keep-out zone = reservation + sponge radius +
+ * scrub amplitude for the sponge center: x 138..442, y 26..259); the
+ * touch-up pass first wipes everything outside the keep-out zone, the
+ * monster and its edge last of all */
 #define CR_RES_X0 190
 #define CR_RES_X1 390
 #define CR_RES_Y0 80
@@ -1346,8 +1346,8 @@ static int cr_in_zone(double x, double y)
 {
     return x > CR_SZ_X0 && x < CR_SZ_X1 && y > CR_SZ_Y0 && y < CR_SZ_Y1;
 }
-/* "Schmutzig" = ungewischt UND im Standbild sichtbar (nicht fast schwarz):
- * leerer Weltraum muss nicht geputzt werden */
+/* "Dirty" = unwiped AND visible in the freeze frame (not near-black):
+ * empty space does not need cleaning */
 static int cr_dirty_px(int x, int y)
 {
     Uint32 c;
@@ -1378,12 +1378,12 @@ static int cr_wipe_dirty(double px, double py, int skip_res, int *tx, int *ty)
     return 0;
 }
 
-/* Wischplan: Striche (x0,y0)->(x1,y1); vert = Vertikalstrich (kleinere
- * Seitwaerts-Amplitude, damit die Spalten lueckenlos decken); detour =
- * ueber dem Monster nach OBEN ausbiegen (Strich 1). Reihenfolge: zwei
- * Bahnen oben, drei Spalten links, Traverse unter dem Monster, vier
- * Spalten rechts, zwei Bahnen unten - "mal hin und her, mal von oben
- * nach unten" (Nutzerwunsch) */
+/* Wipe plan: strokes (x0,y0)->(x1,y1); vert = vertical stroke (smaller
+ * sideways amplitude, so the columns cover with no gaps); detour =
+ * swing UPWARD over the monster (stroke 1). Order: two paths along
+ * the top, three columns left, traverse below the monster, four
+ * columns right, two paths along the bottom - "back and forth, then
+ * top to bottom" (user request) */
 static const struct { short x0, y0, x1, y1, vert, detour; } cr_wplan[12] = {
     {  30,  25, 610,  25, 0, 0 },
     { 610,  75,  30,  75, 0, 1 },
@@ -1399,12 +1399,12 @@ static const struct { short x0, y0, x1, y1, vert, detour; } cr_wplan[12] = {
     {  30, 375, 610, 375, 0, 0 } };
 #define CR_NWPLAN 12
 
-/* Wischer einen Zeitschritt weiter, Maske anwenden, Arm zeichnen.
- * Menschlich: Strichtempo variiert (10..17 px/Frame), Striche wechseln
- * Richtung und Orientierung (Plan oben), Strich 1 biegt ueber dem
- * Monster nach oben aus, Nachputz-Wege weichen der Sperrzone aus.
- * Wischgeraeusch sehr, sehr subtil (sound_wipe: Grundpegel bei Kontakt
- * + Tempoanteil, traege). Kein Quietschen (Nutzerentscheidung). */
+/* Advance the wiper one time step, apply mask, draw arm.
+ * Human-like: stroke speed varies (10..17 px/frame), strokes alternate
+ * direction and orientation (plan above), stroke 1 swings up over the
+ * monster, touch-up paths dodge the keep-out zone.
+ * Wipe sound very, very subtle (sound_wipe: base level on contact
+ * + speed share, sluggish). No squeak (user decision). */
 static void cr_wipe_step(double tf, double dt)
 {
     const double T_IN = 40.0;
@@ -1417,15 +1417,15 @@ static void cr_wipe_step(double tf, double dt)
         cr_wband = 0; cr_wtarget = -1; cr_wdown = 0;
     }
     if (cr_wp != 4) cr_wt += dt;
-    /* Amplituden-Ziel je Strichart: horizontal 18/14, vertikal 6/14
-     * (Spaltenkern 68-12=56 >= 50) - weich nachgefuehrt */
+    /* Target amplitude per stroke type: horizontal 18/14, vert 6/14
+     * (column core 68-12=56 >= 50) - smoothly tracked */
     axmax = (cr_wp == 1 && cr_wplan[cr_wband].vert) ? 6.0 : 18.0;
     aymax = 14.0;
     cr_wax += (axmax - cr_wax) * (dt / 8.0 > 1.0 ? 1.0 : dt / 8.0);
     cr_way += (aymax - cr_way) * (dt / 8.0 > 1.0 ? 1.0 : dt / 8.0);
     switch (cr_wp) {
-    case 0: {                             /* Einfahrt von unten zum ersten
-                                           * Ansatzpunkt */
+    case 0: {                             /* Entry from below to the first
+                                           * start point */
         double y0 = (CR_WPATH_N > 0) ? (double)cr_wpath[0][1] : (double)cr_wplan[0].y0;
         cr_wy = 460.0 + (y0 - 460.0) * cr_smooth(cr_wt / T_IN);
         if (cr_wt >= T_IN) {
@@ -1435,26 +1435,26 @@ static void cr_wipe_step(double tf, double dt)
             else { cr_wp = 1; cr_wdur = len / (10.0 + 7.0 * cr_rnd(900UL)); }
         }
         break; }
-    case 5: {                             /* AUFGENOMMENER Pfad (wiperec):
-                                           * Position linear zwischen den
-                                           * 50-Hz-Stuetzstellen, Schwamm
-                                           * wischt nur, wenn er unten war */
+    case 5: {                             /* RECORDED path (wiperec):
+                                           * position linear between the
+                                           * 50 Hz sample points, sponge
+                                           * wipes only when it was down */
         int i0 = (int)cr_wt;
         double fr = cr_wt - i0;
-        /* Pfad zu Ende: KEIN Nachputzen (Nutzer: "wenn 2 Pixel bleiben,
-         * nicht selbst nachwischen") - direkt Ausblenden/Titel */
+        /* Path finished: NO touch-up pass (user: "if 2 pixels remain,
+         * do not wipe yourself") - straight to fade out/title */
         if (i0 >= CR_WPATH_N - 1) { cr_wp = 4; cr_wt = 0.0; cr_wdown = 0; break; }
         cr_wx = cr_wpath[i0][0] + (cr_wpath[i0 + 1][0] - cr_wpath[i0][0]) * fr;
         cr_wy = cr_wpath[i0][1] + (cr_wpath[i0 + 1][1] - cr_wpath[i0][1]) * fr;
         cr_wdown = cr_wpath[i0][2];
         break; }
-    case 1: {                             /* Strich, abgebremst an den Enden */
+    case 1: {                             /* Stroke, eased at the ends */
         double u = cr_smooth(cr_wt / cr_wdur);
         cr_wx = cr_wplan[cr_wband].x0 + (cr_wplan[cr_wband].x1 - cr_wplan[cr_wband].x0) * u;
         cr_wy = cr_wplan[cr_wband].y0 + (cr_wplan[cr_wband].y1 - cr_wplan[cr_wband].y0) * u;
         if (cr_wplan[cr_wband].detour) {
-            /* ueber dem Monster nach oben ausbiegen: Rampe 110 px vor
-             * der Sperrzone, drueber auf y = Sperrzonen-Oberkante */
+            /* swing upward over the monster: ramp 110 px before
+             * the keep-out zone, above at y = keep-out top edge */
             double b = 0.0;
             if (cr_wx >= CR_SZ_X0 && cr_wx <= CR_SZ_X1) b = 1.0;
             else if (cr_wx > CR_SZ_X0 - 110.0 && cr_wx < CR_SZ_X0)
@@ -1468,8 +1468,8 @@ static void cr_wipe_step(double tf, double dt)
             if (cr_wband + 1 < CR_NWPLAN) cr_wp = 2; else cr_wp = 3;
         }
         break; }
-    case 2: {                             /* Uebergang: Ende -> Start des
-                                           * naechsten Strichs (wischt mit) */
+    case 2: {                             /* Transition: end -> start of
+                                           * the next stroke (wipes too) */
         double xa = cr_wplan[cr_wband].x1, ya = cr_wplan[cr_wband].y1;
         double xb = cr_wplan[cr_wband + 1].x0, yb = cr_wplan[cr_wband + 1].y0;
         double d = sqrt((xb - xa) * (xb - xa) + (yb - ya) * (yb - ya));
@@ -1486,22 +1486,22 @@ static void cr_wipe_step(double tf, double dt)
             if (cr_wdur < 12.0) cr_wdur = 12.0;
         }
         break; }
-    case 3: {                             /* Nachputzen: erst alles ausser-
-                                           * halb der Sperrzone, dann das
-                                           * Monster; naechstes Ziel zuerst */
-        int outside = cr_wipe_dirty(cr_wx, cr_wy, 1, &tx, &ty);   /* nur Plan-Modus */
+    case 3: {                             /* Touch-up pass: first everything out-
+                                           * side the keep-out zone, then the
+                                           * monster; next target first */
+        int outside = cr_wipe_dirty(cr_wx, cr_wy, 1, &tx, &ty);   /* plan mode only */
         if ((!outside && !cr_wipe_dirty(cr_wx, cr_wy, 0, &tx, &ty)) || cr_wt > 700.0) {
             cr_wp = 4; cr_wt = 0.0;
         } else {
             double dx = tx - cr_wx, dy = ty - cr_wy, d = sqrt(dx * dx + dy * dy);
             double st = 14.0 * dt, nx, ny;
-            int key = (ty / 32) * 64 + tx / 32;   /* Zielwechsel merken */
+            int key = (ty / 32) * 64 + tx / 32;   /* note target switch */
             if (key != cr_wtarget) cr_wtarget = key;
             if (d > st) { nx = cr_wx + dx / d * st; ny = cr_wy + dy / d * st; }
             else { nx = tx; ny = ty; }
             if (outside && cr_in_zone(nx, ny)) {
-                /* Weg fuehrt durchs Monster: an der Sperrzonenkante
-                 * entlang (nach oben oder unten, was naeher ist) */
+                /* path leads through the monster: follow the keep-out
+                 * edge (upward or downward, whichever is nearer) */
                 ny = (cr_wy < (CR_SZ_Y0 + CR_SZ_Y1) / 2.0) ? (double)CR_SZ_Y0 : (double)CR_SZ_Y1;
                 if (fabs(ny - cr_wy) > st) ny = cr_wy + (ny > cr_wy ? st : -st);
                 if (cr_in_zone(nx, ny)) nx = cr_wx;
@@ -1509,28 +1509,28 @@ static void cr_wipe_step(double tf, double dt)
             cr_wx = nx; cr_wy = ny;
         }
         break; }
-    default: break;                       /* 4: Hand bleibt stehen */
+    default: break;                       /* 4: hand stays put */
     }
-    /* Schrubben: zwei Oszillatoren (x, y um 90 Grad versetzt) mit
-     * langsam "atmenden" Amplituden - morpht stufenlos zwischen Kreisen
-     * (beide gross), Seitwaerts (nur x), Hoch-Runter (nur y) und geradem
-     * Zug (beide klein), ohne Umschaltsprung; menschlich unregelmaessig */
+    /* Scrubbing: two oscillators (x, y offset by 90 degrees) with
+     * slowly "breathing" amplitudes - morphs steplessly between circles
+     * (both large), sideways (x only), up-down (y only) and a straight
+     * pull (both small), with no switching jump; humanly irregular */
     wiping = (cr_wp >= 1 && cr_wp <= 3) || (cr_wp == 5 && cr_wdown);
     if (cr_wp >= 1 && cr_wp <= 3) cr_wcirc += 0.38 * dt;
     ax = cr_wax * (0.5 + 0.5 * sin(cr_wcirc * 0.071 + 1.0));
     ay = cr_way * (0.5 + 0.5 * sin(cr_wcirc * 0.053));
-    if (cr_wp == 5) ax = ay = 0.0;        /* Pfad: die Hand schrubbt selbst */
+    if (cr_wp == 5) ax = ay = 0.0;        /* path: the hand scrubs itself */
     cx = cr_wx + ax * cos(cr_wcirc);
     cy = cr_wy + ay * sin(cr_wcirc);
     if (wiping) {
-        /* Abdruck: aktuelle Position und der Weg seit dem letzten Render
-         * (Zwischenschritt), damit kein Pixel zwischen zwei Bildern
-         * uebersprungen wird */
+        /* Footprint: current position and the path since the last render
+         * (in-between step), so that no pixel is skipped between
+         * two frames */
         cr_wipe_stamp((cr_wpx + cx) * 0.5, (cr_wpy + cy) * 0.5);
         cr_wipe_stamp(cx, cy);
     }
-    {   /* Wischpegel: Grundpegel 40 + Tempoanteil, Tempo ueber ~12 Frames
-         * geglaettet (Mausaufnahme springt je Frame) */
+    {   /* Wipe level: base level 40 + speed share, speed smoothed over
+         * ~12 frames (mouse recording jumps each frame) */
         double vx = (cx - cr_wpx) / (dt > 0.05 ? dt : 1.0);
         double vy = (cy - cr_wpy) / (dt > 0.05 ? dt : 1.0);
         double sp = sqrt(vx * vx + vy * vy);
@@ -1540,9 +1540,9 @@ static void cr_wipe_step(double tf, double dt)
         sound_wipe(lvl > 100 ? 100 : lvl);
     }
     cr_wpx = cx; cr_wpy = cy;
-    /* "Iehh" des Daemons, sobald mehr als die Haelfte SEINER Pixel
-     * (Monstermaske vom Einfrieren) weggewischt ist; "Ouh", wenn er
-     * praktisch ganz weg ist (>= 97%, falls ein paar Pixel uebersehen) */
+    /* The demon's "Iehh" as soon as more than half of HIS pixels
+     * (monster mask from the freeze) are wiped away; "Ouh" when he
+     * is practically all gone (>= 97%, in case a few pixels missed) */
     if ((!cr_iehh || !cr_ouh) && wiping) {
         long vis = 0, gone = 0;
         for (i = 0; i < BOOT_TW * BOOT_TH; ++i)
@@ -1550,13 +1550,13 @@ static void cr_wipe_step(double tf, double dt)
         if (vis > 0 && !cr_iehh && gone * 2 > vis) { cr_iehh = 1; sound_play(SND_IEHH); }
         if (vis > 0 && !cr_ouh && gone * 100 >= vis * 97) { cr_ouh = 1; sound_play(SND_OUH); }
     }
-    /* Maske anwenden: gewischt = schwarz */
+    /* apply mask: wiped = black */
     for (i = 0; i < BOOT_TW * BOOT_TH; ++i)
         if (cr_wmask[i]) bpix[i] = 0xFF000000UL;
-    /* Arm: Sprite an der Schwammmitte, Stange nach unten gekachelt */
+    /* arm: sprite at the sponge center, pole tiled downward */
     {
         double ax2 = cx - AR_SPCX + AR_W / 2.0, ay2 = cy - AR_SPCY + AR_H / 2.0;
-        double ry = ay2 + AR_H / 2.0;     /* Unterkante des Sprites */
+        double ry = ay2 + AR_H / 2.0;     /* sprite bottom edge */
         int rh = AR_H - AR_RODY0;
         cr_blit_rgba(ar_rgba, AR_W, AR_H, ax2, ay2, 1.0, 0, 256);
         while (ry < BOOT_TH) {
@@ -1571,29 +1571,29 @@ static void credits_render(void)
     double tf = cr_tf, dt, rot, cs, sn;
     int i, x, y, t = (int)tf;
     unsigned long dec;
-    (void)cr_text;                        /* grosse Variante folgt spaeter */
+    (void)cr_text;                        /* large variant follows later */
     if (!cr_ready) cr_morph_init();       /* Headless/Fallback */
     cr_finale_init();
-    /* Aufprall: Spiegel aus dem LETZTEN fertigen Bild einfrieren (bpix
-     * traegt es noch), Scherben erzeugen, Sound, MOD-Fade */
+    /* Impact: freeze the mirror from the LAST finished frame (bpix
+     * still holds it), spawn shards, sound, MOD fade */
     if (!cr_broken && tf >= cr_timp) cr_shatter_init();
     if (cr_broken && !cr_laughed && tf >= cr_timp + CR_LAUGH_AT) {
-        cr_laughed = 1;                   /* der Daemon lacht ueber den Bruch */
+        cr_laughed = 1;                   /* the demon laughs about the break */
         sound_play(SND_HAHA);
     }
-    /* Zeitschritt seit dem letzten Render (in 50Hz-Frames); mit VSync
-     * kommen ~60 Renders/s auf 50 Logikframes -> alles Kontinuierliche
-     * skaliert mit dt statt mit dem Aufrufzaehler */
+    /* Time step since the last render (in 50Hz frames); with VSync
+     * ~60 renders/s meet 50 logic frames -> everything continuous
+     * scales with dt instead of with the call counter */
     dt = tf - cr_tprev;
     if (dt < 0.0 || dt > 3.0) dt = 1.0;
     cr_tprev = tf;
-    /* Wischphase: Standbild. Beim ersten Wisch-Frame das LETZTE fertige
-     * Bild einfrieren (bpix traegt es noch, ohne Arm) - Starfield,
-     * Daemon, Scherben, Copper stehen still und werden weggewischt */
+    /* Wipe phase: freeze frame. On the first wipe frame freeze the LAST
+     * finished frame (bpix still holds it, no arm) - starfield,
+     * demon, shards, copper stand still and get wiped away */
     if (cr_broken && tf >= cr_timp + CR_WIPE_START) {
         if (!cr_frozen) {
-            /* Standbild + exakte Monstermaske (Sprite-Alpha an der
-             * eingefrorenen Position/Frame) fuer das "Iehh" */
+            /* Freeze frame + exact monster mask (sprite alpha at the
+             * frozen position/frame) for the "Iehh" */
             int mcx, mcy, mfront, mx, my, fr; double msc, mdv;
             memcpy(cr_freeze, bpix, sizeof(cr_freeze));
             memset(cr_mmask, 0, sizeof(cr_mmask));
@@ -1612,8 +1612,8 @@ static void credits_render(void)
         cr_wipe_step(tf, dt);
         return;
     }
-    /* Trail abklingen lassen = echter leichter Motion Blur (168/256 je
-     * Logikframe, auf den echten Zeitschritt umgerechnet) */
+    /* Let the trail decay = real slight motion blur (168/256 per logic
+     * frame, converted to the real time step) */
     dec = (unsigned long)(256.0 * pow(168.0 / 256.0, dt) + 0.5);
     for (i = 0; i < BOOT_TW * BOOT_TH; ++i) {
         Uint32 c = cr_trail[i];
@@ -1622,16 +1622,16 @@ static void credits_render(void)
             | ((((c >> 8) & 0xFF) * dec >> 8) << 8)
             | (((c & 0xFF) * dec) >> 8);
     }
-    /* Drehung: gleiche Richtung wie das Titel-Starfield, aber
-     * gemaechlicher (Nutzerwunsch) */
+    /* Rotation: same direction as the title starfield, but
+     * more leisurely (user request) */
     rot = tf * -0.004;
     cs = cos(rot); sn = sin(rot);
-    cr_cs = cs; cr_sn = sn;               /* fuer Spawn-Zentrierung */
-    /* Der KOMPLETTE Raum schwenkt zeitweise seitlich: Kamera-
-     * versatz in WELTkoordinaten (vor der Tiefenprojektion) -
-     * nahe Sterne schieben stark, ferne kaum (echte Parallaxe).
-     * Langsame Huellkurve schaltet frontal <-> seitlich; bei t=0
-     * exakt mittig -> nahtloser Morph. */
+    cr_cs = cs; cr_sn = sn;               /* for spawn centering */
+    /* The WHOLE room pans sideways at times: camera off-
+     * set in WORLD coordinates (before the depth projection) -
+     * near stars shift a lot, far ones barely (true parallax).
+     * A slow envelope switches frontal <-> sideways; at t=0
+     * exactly centered -> seamless morph. */
     {
         double env = (sin(tf * 0.004) + 1.0) * 0.5;
         cr_ox = sin(tf * 0.006) * 0.80 * env;
@@ -1640,22 +1640,22 @@ static void credits_render(void)
     for (i = 0; i < CR_STARS; ++i) {
         double rx, ry, px, py;
         unsigned long br, r, gg, b;
-        if (cr_sz[i] <= 0.0) {            /* gestaffeltes Nachruecken */
+        if (cr_sz[i] <= 0.0) {            /* staggered refill */
             if ((double)t >= -cr_sz[i] - 1.0) cr_star_reset(i, 0);
             else continue;
         }
-        cr_sz[i] -= 0.002 * dt;           /* dauerhaft auf den Betrachter zu */
+        cr_sz[i] -= 0.002 * dt;           /* permanently toward the viewer */
         if (cr_sz[i] < 0.045) { cr_star_reset(i, 1); continue; }
         rx = cr_sx[i] * cs - cr_sy[i] * sn;
         ry = cr_sx[i] * sn + cr_sy[i] * cs;
         px = 320.0 + (rx + cr_ox) / cr_sz[i] * 230.0;
         py = 200.0 + (ry + cr_oy) / cr_sz[i] * 230.0;
         if (px < -2 || px > BOOT_TW + 2 || py < -2 || py > BOOT_TH + 2) {
-            cr_star_reset(i, 0);          /* seitlich raus: zufaellige
-                                           * Tiefe, sonst duennt vorn aus */
+            cr_star_reset(i, 0);          /* sideways exit: random
+                                           * depth, else front thins out */
             continue;
         }
-        /* vorn heller als hinten - hinten aber SICHTBAR bleiben */
+        /* front brighter than back - but back must stay VISIBLE */
         br = (unsigned long)(255.0 * (1.1 - cr_sz[i]));
         if (br > 255) br = 255;
         br = 36 + ((br * br / 255) * 219 >> 8);
@@ -1663,20 +1663,20 @@ static void credits_render(void)
         else if ((i & 3) == 1) { r = br * 7 / 8; gg = br * 15 / 16; b = br; }
         else { r = br; gg = br; b = br; }
         cr_plot((int)px, (int)py, r, gg, b);
-        if (cr_sz[i] < 0.30) {            /* vorn: 2x2, fast voll */
+        if (cr_sz[i] < 0.30) {            /* front: 2x2, ~full */
             cr_plot((int)px + 1, (int)py, r * 3 / 4, gg * 3 / 4, b * 3 / 4);
             cr_plot((int)px, (int)py + 1, r * 3 / 4, gg * 3 / 4, b * 3 / 4);
             cr_plot((int)px + 1, (int)py + 1, r >> 1, gg >> 1, b >> 1);
-        } else if (cr_sz[i] < 0.50) {     /* Mitte: 1px + halber Nachbar */
+        } else if (cr_sz[i] < 0.50) {     /* middle: 1px + half neighbor */
             cr_plot((int)px + 1, (int)py, r >> 1, gg >> 1, b >> 1);
         }
     }
     memcpy(bpix, cr_trail, sizeof(cr_trail));
-    /* Unter der Spiegelkante fliegt KEIN Starfield: die Zeilen dort
-     * zeigen nur die gestuerzte, dunkle Spiegelung der Sterne von oben,
-     * mit der Tiefe verblassend (Sterne selbst werden dort ueberdeckt).
-     * Nach dem Spiegelbruch bleibt das echte Starfield stehen: durch
-     * den zerschlagenen Boden schaut man in den Weltraum. */
+    /* Below the mirror edge NO starfield flies: the lines there show
+     * only the toppled, dark reflection of the stars from above,
+     * fading with depth (the stars themselves are covered there).
+     * After the mirror breaks the real starfield stays: through the
+     * smashed floor you look out into space. */
     for (y = CR_ML; y < BOOT_TH && !cr_broken; ++y) {
         int depth = y - CR_ML, ys = 2 * CR_ML - y;
         unsigned long f = (depth < 42) ? (unsigned long)(42 - depth) * 100UL / 42UL : 0UL;
@@ -1688,8 +1688,8 @@ static void credits_render(void)
                 | (((c & 0xFF) * f) >> 8);
         }
     }
-    /* Titel-Schnappschuss blendet additiv aus (Logo, Texte, Roboter) -
-     * die alten Sterne uebergeben dabei an ihre Morph-Nachfolger */
+    /* Title snapshot fades out additively (logo, texts, robot) -
+     * the old stars hand over to their morph successors here */
     if (t < 64) {
         unsigned long ta = 256UL - (unsigned long)t * 4UL;
         for (y = 0; y < VIC_H; ++y)
@@ -1714,8 +1714,8 @@ static void credits_render(void)
                     }
             }
     }
-    {   /* Monster HINTER dem Logo (obere Bahnhaelfte), Stein in den
-         * Krallen zuerst (die Fuesse ueberdecken seinen Rand) */
+    {   /* Monster BEHIND the logo (upper half of the path), rock in the
+         * claws first (the feet cover its edge) */
         int mcx, mcy, mfront; double msc, mdv, rx, ry, rsc;
         cr_monster_pos(tf, &mcx, &mcy, &msc, &mfront, &mdv);
         if (!mfront) {
@@ -1724,8 +1724,8 @@ static void credits_render(void)
             cr_monster_draw(tf, 0);
         }
     }
-    /* Logo oben, zwei Phasen: die WEISSE Silhouette fadet kurz von
-     * Schwarz auf (0.8s), dann brechen die Farben durch (1.2s) */
+    /* Logo at the top, two phases: the WHITE silhouette briefly fades
+     * in from black (0.8s), then colors break through (1.2s) */
     {
         int la, wf;
         if (t < 85)       { la = (t - 60) * 256 / 25;       wf = 256; }
@@ -1745,9 +1745,9 @@ static void credits_render(void)
                 r0 = (r0 * (256 - a) + p[0] * a) >> 8;
                 g0 = (g0 * (256 - a) + p[1] * a) >> 8;
                 b0 = (b0 * (256 - a) + p[2] * a) >> 8;
-                if (wf) {                 /* Weissblitz, mit Pixel-Alpha
-                                           * gewichtet (Rausch-Alpha im
-                                           * PNG sonst = weisser Kasten) */
+                if (wf) {                 /* White flash, weighted by
+                                           * pixel alpha (else noise alpha
+                                           * in the PNG = white box) */
                     unsigned long wa = ((unsigned long)wf * p[3]) >> 8;
                     r0 += ((255 - r0) * wa) >> 8;
                     g0 += ((255 - g0) * wa) >> 8;
@@ -1756,9 +1756,9 @@ static void credits_render(void)
                 *d = 0xFF000000UL | (r0 << 16) | (g0 << 8) | b0;
             }
     }
-    /* Regenbogen-Copperlinie unter dem Logo: duenner heller Kern,
-     * Enden vignettiert; Hue macht GENAU einen Umlauf ueber die
-     * Breite (nahtlos) und laeuft langsam nach links */
+    /* Rainbow copper line under the logo: thin bright core, ends
+     * vignetted; hue makes EXACTLY one lap across the width
+     * (seamless) and drifts slowly to the left */
     {
         int la = t - 60, lx0 = 12, lw = 616, ly = 272, lx, lr;
         static const unsigned char rowf[5] = { 70, 180, 255, 180, 70 };
@@ -1768,7 +1768,7 @@ static void credits_render(void)
                 int r, gg, b, e, v;
                 cr_rainbow((lx * 1536 / lw + (int)(tf * 10.0)) % 1536, &r, &gg, &b);
                 e = (lx < lw - 1 - lx) ? lx : lw - 1 - lx;
-                v = (e < 70) ? e * 256 / 70 : 256;   /* Endvignette */
+                v = (e < 70) ? e * 256 / 70 : 256;   /* end vignette*/
                 v = (v * la) >> 8;
                 for (lr = 0; lr < 5; ++lr) {
                     int m = (v * rowf[lr] * 3 / 4) >> 8;
@@ -1779,7 +1779,7 @@ static void credits_render(void)
                 }
             }
     }
-    /* Signatur klein rechts unter dem Streifen */
+    /* small signature at right under the strip */
     {
         static const char *sig = "DOMY OF SYNDEV";
         int la = t - 60;
@@ -1787,16 +1787,16 @@ static void credits_render(void)
         if (la > 0)
             cr_text_small(sig, 628 - cr_text_small_w(sig), 281, la);
     }
-    cr_flares(t);                         /* Glitzern auf dem Logo */
-    cr_monster_draw(tf, 1);               /* Schatten aufs Logo (nur vorn) */
-    /* Spiegelboden: zarter Blauverlauf unter der Spiegelkante - an der
-     * Kante eine feine hellere Horizontlinie, darunter Blau, das zum
-     * unteren Rand hin in die Tiefe verblasst (Sterne bleiben schwach
-     * sichtbar); blendet mit dem Rest ein */
+    cr_flares(t);                         /* Sparkle on the logo */
+    cr_monster_draw(tf, 1);               /* Shadow on logo (front only) */
+    /* Mirror floor: soft blue gradient below the mirror edge - at the
+     * edge a fine brighter horizon line, below it blue that fades
+     * into the depth toward the bottom edge (stars stay faintly
+     * visible); fades in with the rest */
     {
         int la = t - 60;
         if (la > 256) la = 256;
-        if (cr_broken) la = 0;            /* Boden ist weg */
+        if (cr_broken) la = 0;            /* Floor is gone */
         if (la > 0)
             for (y = CR_ML; y < BOOT_TH; ++y) {
                 int depth = y - CR_ML;
@@ -1817,20 +1817,20 @@ static void credits_render(void)
                 }
             }
     }
-    /* Credits-Sequenz: jeder Eintrag faehrt von rechts ein, steht seine
-     * Zeit mittig schwingend, faehrt nach links raus, waehrend der
-     * naechste einfaehrt; nach dem letzten wieder von vorn. Die Glyphen
-     * landen in der Textebene (Zeilen >= CR_TY0 nach Geometrie: Welle
-     * 300+-20, Glyph +-25, Spiegel bis 399) */
+    /* Credits sequence: each entry moves in from the right, stands its
+     * time swinging in the middle, moves out to the left while the
+     * next one moves in; after the last one it starts over. The glyphs
+     * land in the text layer (rows >= CR_TY0 by geometry: wave
+     * 300+-20, glyph +-25, mirror up to 399) */
     memset(cr_tlayer, 0, sizeof(cr_tlayer));
     cr_flucht_takt(tf);
     {
-        const int E = CR_SEQ_E, V = CR_SEQ_V;   /* Ein-/Ausfahrt: 150 Frames a 5px */
+        const int E = CR_SEQ_E, V = CR_SEQ_V;   /* Move in/out: 150 frames at 5px */
         if (tf >= 40.0) {
             int cycle = cr_seq_cycle(), k, start = 0, m;
             double u = tf - 40.0;
-            if (u >= cycle) {             /* Sequenz vorbei: letzte Zeile
-                                           * faehrt links raus, dann Ruhe */
+            if (u >= cycle) {             /* Sequence over: last line
+                                           * moves out left, then idle */
                 double lu = u - cycle;
                 if (lu < E)
                     for (m = 0; m < 2; ++m) {
@@ -1843,8 +1843,8 @@ static void credits_render(void)
                 int len = E + cr_seq[k].hold;
                 if (u < start + len) {
                     double lu = u - start;
-                    /* Vorgaenger faehrt links raus (nicht beim allerersten);
-                     * Durchlauf 0 = Text, 1 = Bodenspiegelung */
+                    /* Predecessor moves out to the left (not for the very first);
+                     * pass 0 = text, 1 = floor mirroring */
                     for (m = 0; m < 2; ++m) {
                         cr_mirror = m;
                         if (lu < E && k > 0)
@@ -1858,26 +1858,26 @@ static void credits_render(void)
             }
         }
     }
-    {   /* Monster VOR dem Logo (untere Bahnhaelfte) samt Bodenspiegelung
-         * (zeichnet nur nahe der Kante) - VOR dem Einblenden der Text-
-         * ebene: beim Abstecher steht der Daemon HINTER dem Scrolltext,
-         * der um ihn herum wie durch eine Glaskugel verzerrt wird.
-         * Finale: Stein in den Krallen vor dem Daemon zeichnen */
+    {   /* Monster IN FRONT of the logo (lower half of the path) with floor
+         * mirroring (draws only near the edge) - BEFORE fading in the
+         * text layer: on the detour the demon stands BEHIND the scroll
+         * text, which is warped around him as by a glass ball.
+         * Finale: draw the rock in the claws in front of the demon */
         int mcx, mcy, mfront; double msc, mdv, rx, ry, rsc;
         cr_monster_pos(tf, &mcx, &mcy, &msc, &mfront, &mdv);
-        if (mfront) {                     /* Stein immer VOR dem Daemon
-                                           * zeichnen (getragen wie frei):
-                                           * kein Ebenensprung beim Loslassen,
-                                           * die Fuesse bleiben davor */
+        if (mfront) {                     /* Always draw the rock IN FRONT
+                                           * of the demon (carried or free):
+                                           * no layer jump on release,
+                                           * the feet stay in front */
             if (cr_rock_pos(tf, &rx, &ry, &rsc))
                 cr_blit_rgba(rk_rgba, RK_W, RK_H, rx, ry, rsc, 0, cr_rock_alpha(tf));
             cr_monster_draw(tf, 0);
             if (!cr_broken) cr_monster_draw(tf, 2);
         }
     }
-    cr_text_composite(tf);                /* Ebene einblenden: Linse */
-    {   /* Finale: Spiegelbild des fallenden Steins (solange der Boden
-         * heil ist), Scherben, Ausblende */
+    cr_text_composite(tf);                /* Fade in the layer: lens */
+    {   /* Finale: mirror image of the falling rock (while the floor
+         * is intact), shards, fade out */
         double rx, ry, rsc;
         if (tf >= cr_tdrop && !cr_broken && cr_rock_pos(tf, &rx, &ry, &rsc))
             cr_blit_rgba(rk_rgba, RK_W, RK_H, rx, ry, rsc, 1, 256);
@@ -1901,12 +1901,12 @@ static int video_init(int scale)
     return (tex && btex) ? 0 : -1;
 }
 
-/* TEMP Debug: direkt in Mission n (0..3) springen (spaeter entfernen) */
+/* TEMP debug: jump straight into mission n (0..3) (remove later) */
 static void jump_mission(int n)
 {
     if (n < 0 || n > 3) return;
     g.mission = n;
-    g.level = n;                 /* MS-Zaehler passend: Taste 1 -> MS:01 usw. */
+    g.level = n;                 /* MS counter to match: key 1 -> MS:01 etc. */
     game_start_mission();
 }
 
@@ -1920,12 +1920,12 @@ int main(int argc, char **argv)
     for (i = 1; i < argc; ++i) {
         if (!strcmp(argv[i], "-f") && i + 1 < argc) frames = atoi(argv[++i]);
         else if (!strcmp(argv[i], "-shot") && i + 1 < argc) shot = argv[++i];
-        else if (!strcmp(argv[i], "-cheat")) cheat = 1;   /* Debug-Tasten an */
+        else if (!strcmp(argv[i], "-cheat")) cheat = 1;   /* Debug keys on */
     }
 
     game_init();
     if (!shot || getenv("GORPH_BOOT")) {
-        g.state = ST_BOOT;                /* Boot-Screen nur beim Start */
+        g.state = ST_BOOT;                /* Boot screen only at start */
         g.statetimer = 0;
     }
 
@@ -1936,8 +1936,8 @@ int main(int argc, char **argv)
         for (i = 0; i < frames; ++i) {
             int dbg = getenv("GORPH_JUMP") ? atoi(getenv("GORPH_JUMP")) : -1;
             if (dbg >= 0 && i == 10) jump_mission(dbg);
-            /* GORPH_CREDITS=N: bei Frame N vom Titel in die Credits
-             * morphen (Titelbild wird dafuer einmal gerendert) */
+            /* GORPH_CREDITS=N: morph from the title screen into the credits
+             * at frame N (title image is rendered once for it) */
             if (getenv("GORPH_CREDITS") && g.state == ST_TITLE &&
                 i == atoi(getenv("GORPH_CREDITS"))) {
                 vic_render(frame);
@@ -1956,15 +1956,15 @@ int main(int argc, char **argv)
             game_frame();
             game_draw();
             if (g.state == ST_CREDITS && cr_finale_done((double)g.statetimer)) {
-                sound_mod_stop();         /* Finale vorbei: zurueck zum Titel */
+                sound_mod_stop();         /* Finale over: back to title */
                 sound_wipe(0);
                 game_title_return();
             }
-            if (g.state == ST_CREDITS) {  /* Trail-Puffer braucht Historie */
+            if (g.state == ST_CREDITS) {  /* Trail buffer needs history */
                 cr_tf = (double)g.statetimer
                       + (getenv("GORPH_FRAC") ? atof(getenv("GORPH_FRAC")) : 0.0);
-                credits_render();         /* GORPH_FRAC: Sub-Frame-Zeit wie
-                                           * im VSync-Pfad nachstellen */
+                credits_render();         /* GORPH_FRAC: reproduce sub-frame time
+                                           * as in the VSync path */
             }
         }
         vic_render(frame);
@@ -1972,12 +1972,12 @@ int main(int argc, char **argv)
         to_pixels();
         tw_overlay();
         robot_overlay();
-        if (getenv("GORPH_WDBG")) {       /* Headless-Diagnose: Wischmaske
-                                           * als PGM + Wischerzustand */
+        if (getenv("GORPH_WDBG")) {       /* Headless diagnostics: wipe mask
+                                           * as PGM + wiper state */
             FILE *f = fopen(getenv("GORPH_WDBG"), "wb");
             if (f) { fprintf(f, "P5 %d %d 255\n", BOOT_TW, BOOT_TH);
                      fwrite(cr_wmask, 1, sizeof(cr_wmask), f); fclose(f); }
-            {   /* dazu die Monstermaske (Wert 1 -> 255) */
+            {   /* plus monster mask (value 1 -> 255) */
                 char nm[512]; int k;
                 sprintf(nm, "%s.mon.pgm", getenv("GORPH_WDBG"));
                 f = fopen(nm, "wb");
@@ -2024,63 +2024,63 @@ int main(int argc, char **argv)
             }
             if (e.type == SDL_CONTROLLERDEVICEADDED && !pad)
                 pad = SDL_GameControllerOpen(e.cdevice.which);
-            /* Jede Taste beendet den Attract-Mode (zurueck zum Titel;
-             * Space startet danach regulaer das Spiel) */
+            /* Any key ends attract mode (back to the title screen;
+             * Space then starts the game normally) */
             if (g.demo && e.type == SDL_KEYDOWN && !e.key.repeat) {
-                game_title_return();      /* Taste ist damit verbraucht:
-                                           * C startet NICHT gleich Credits */
+                game_title_return();      /* the key is thereby used up:
+                                           * C does NOT start credits now */
                 continue;
             }
             if (e.type == SDL_KEYDOWN && !e.key.repeat) {
                 SDL_Keycode s = e.key.keysym.sym;
                 if (cheat && s == SDLK_0 && g.state == ST_CREDITS) {
-                    g.statetimer = 4300;  /* Cheat 0: kurz vors Ende springen
-                                           * (Sternenzeile, dann Finale) -
-                                           * Musik an die echte Position,
-                                           * Finale-Zustand zurueck */
+                    g.statetimer = 4300;  /* Cheat 0: jump to just before the end
+                                           * (star line, then finale) -
+                                           * music to the real position,
+                                           * finale state reset */
                     cr_finale_reset();
                     sound_mod_seek(4300.0 / 50.0);
                     continue;
                 }
-                if (g.state == ST_CREDITS) {  /* jede Taste: zurueck */
+                if (g.state == ST_CREDITS) {  /* any key: back */
                     sound_mod_stop();
                     sound_wipe(0);
                     game_title_return();
-                    prevfire = 1;         /* Space-Exit feuert nicht sofort */
+                    prevfire = 1;         /* Space exit does not fire now */
                     continue;
                 }
                 if (s == SDLK_c && g.state == ST_TITLE && g.bootzoom == 0) {
-                    cr_morph_init();      /* Sterne + Titelbild uebernehmen
-                                           * (braucht noch die Titel-Zeit) */
+                    cr_morph_init();      /* take over stars + title image
+                                           * (still needs the title time) */
                     g.state = ST_CREDITS;
                     g.statetimer = 0;
-                    sound_wind(0);        /* Titel-Orbit-Wind aus */
-                    sound_mod_start();    /* Chiptune laeuft in den Credits */
+                    sound_wind(0);        /* title orbit wind off */
+                    sound_mod_start();    /* chiptune runs in the credits */
                     continue;
                 }
-                /* Debug-/Cheat-Tasten nur mit "gorph -cheat": 1-4 Mission,
-                 * 5 Titel-Intro neu, 6 Flagship-Kill, 8 Level-8-Outro,
-                 * 9 Boot-Screen neu, N naechste Mission inkl. Rang */
+                /* Debug/cheat keys only with "gorph -cheat": 1-4 mission,
+                 * 5 new title intro, 6 flagship kill, 8 level-8 outro,
+                 * 9 new boot screen, N next mission incl. rank */
                 if (!cheat) continue;
                 if (s == SDLK_1 || s == SDLK_KP_1) jump_mission(0);
                 if (s == SDLK_2 || s == SDLK_KP_2) jump_mission(1);
                 if (s == SDLK_3 || s == SDLK_KP_3) jump_mission(2);
                 if (s == SDLK_4 || s == SDLK_KP_4) jump_mission(3);
-                if (s == SDLK_5 || s == SDLK_KP_5)   /* TEMP: Titel-Intro neu */
+                if (s == SDLK_5 || s == SDLK_KP_5)   /* TEMP: new title intro */
                     game_init();
-                if (s == SDLK_6 || s == SDLK_KP_6)   /* TEMP: Flagship-Kill */
+                if (s == SDLK_6 || s == SDLK_KP_6)   /* TEMP: flagship kill */
                     game_debug_win();
-                if (s == SDLK_9 || s == SDLK_KP_9) { /* TEMP: Boot-Screen neu */
+                if (s == SDLK_9 || s == SDLK_KP_9) { /* TEMP: new boot screen */
                     game_init();
                     g.state = ST_BOOT;
                     g.statetimer = 0;
                 }
-                if (s == SDLK_8 || s == SDLK_KP_8) { /* TEMP: Level-8-Outro */
+                if (s == SDLK_8 || s == SDLK_KP_8) { /* TEMP: level-8 outro */
                     jump_mission(3);
                     g.level = 8;
                     game_debug_win();
                 }
-                if (s == SDLK_n) {       /* TEMP: naechste Mission inkl. Rang */
+                if (s == SDLK_n) {       /* TEMP: next mission incl. rank */
                     ++g.mission;
                     if (g.mission >= NUM_MISSIONS) {
                         g.mission = 0;
@@ -2111,9 +2111,9 @@ int main(int argc, char **argv)
         g.fire_edge = (unsigned char)(fire && !prevfire);
         prevfire = fire;
 
-        /* Credits: Logik bleibt 50 Hz (Akkumulator), gerendert wird mit
-         * VSync jedes Display-Frame mit Sub-Frame-Zeit -> kein 50-auf-60-
-         * Ruckeln. Ausserhalb der Credits unveraendert 50 Hz. */
+        /* Credits: logic stays at 50 Hz (accumulator), rendering runs with
+         * VSync on every display frame with sub-frame time -> no 50-on-60
+         * judder. Outside the credits unchanged at 50 Hz. */
         {
             int want = (g.state == ST_CREDITS);
             if (want != cr_vs) {
@@ -2127,7 +2127,7 @@ int main(int argc, char **argv)
             while ((Sint32)(now - next) >= 0 && n < 4) {
                 game_frame(); game_draw(); next += 20; ++n;
             }
-            if ((Sint32)(now - next) >= 0) next = now;   /* Rueckstand kappen */
+            if ((Sint32)(now - next) >= 0) next = now;   /* cap the backlog */
             now = SDL_GetTicks();
             {
                 double frac = 1.0 - (double)(Sint32)(next - now) / 20.0;
@@ -2138,16 +2138,16 @@ int main(int argc, char **argv)
         } else {
             game_frame();
             game_draw();
-            if (g.state == ST_CREDITS)    /* Fallback ohne VSync: Zeit in
-                                           * ganzen Logikframes */
+            if (g.state == ST_CREDITS)    /* Fallback without VSync: time in
+                                           * whole logic frames */
                 cr_tf = (double)g.statetimer;
         }
         if (g.state == ST_CREDITS && cr_finale_done(cr_tf)) {
-            sound_mod_stop();             /* Finale vorbei: zurueck zum Titel */
+            sound_mod_stop();             /* Finale over: back to title */
             sound_wipe(0);
             game_title_return();
             prevfire = 1;
-            cr_titlefade = 1;             /* Titel ein-, Hand ausblenden */
+            cr_titlefade = 1;             /* fade title in, hand out */
         }
         vic_render(frame);
         game_glitch(frame);
@@ -2156,12 +2156,12 @@ int main(int argc, char **argv)
         robot_overlay();
         SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
         SDL_RenderClear(ren);
-        if (g.state == ST_CREDITS) {      /* Amiga-Credits, hochaufgeloest */
+        if (g.state == ST_CREDITS) {      /* Amiga credits, high-res */
             credits_render();
             SDL_UpdateTexture(btex, NULL, bpix, BOOT_TW * sizeof(Uint32));
             SDL_SetTextureAlphaMod(btex, 255);
             SDL_RenderCopy(ren, btex, NULL, NULL);
-        } else if (g.state == ST_BOOT) {  /* hochaufgeloeste Boot-Textur */
+        } else if (g.state == ST_BOOT) {  /* high-res boot texture */
             boot_render();
             SDL_UpdateTexture(btex, NULL, bpix, BOOT_TW * sizeof(Uint32));
             SDL_SetTextureAlphaMod(btex, 255);
@@ -2170,9 +2170,9 @@ int main(int argc, char **argv)
             SDL_UpdateTexture(tex, NULL, pixels, VIC_W * sizeof(Uint32));
             SDL_RenderCopy(ren, tex, NULL, NULL);
             if (cr_titlefade && g.state == ST_TITLE) {
-                /* Nach dem Wischen: das letzte Credits-Bild (schwarz + Hand)
-                 * liegt ueber dem Titel und blendet in 12 Frames aus ->
-                 * Hand verschwindet, Titel erscheint (schnell, Nutzer) */
+                /* After the wipe: the last credits image (black + hand) lies
+                 * over the title screen and fades out in 12 frames ->
+                 * hand disappears, title appears (fast, user) */
                 int al = 255 - (g.statetimer - 750) * 255 / 12;   /* ~0.25 s */
                 if (al <= 0) { al = 0; cr_titlefade = 0; }
                 SDL_UpdateTexture(btex, NULL, bpix, BOOT_TW * sizeof(Uint32));
@@ -2180,8 +2180,8 @@ int main(int argc, char **argv)
                 SDL_SetTextureAlphaMod(btex, (Uint8)al);
                 SDL_RenderCopy(ren, btex, NULL, NULL);
             } else cr_titlefade = 0;
-            if (g.bootzoom > 0) {         /* Boot blendet ueber dem Titel aus:
-                                           * erst haelt das Blau, dann langsam weg */
+            if (g.bootzoom > 0) {         /* boot fades out over the title screen:
+                                           * first the blue holds, then slow fade */
                 int al = (g.bootzoom < 70) ? 255
                        : 255 - (g.bootzoom - 70) * 255 / 120;
                 if (al < 0) al = 0;
@@ -2195,7 +2195,7 @@ int main(int argc, char **argv)
         }
         SDL_RenderPresent(ren);
 
-        if (cr_vs) continue;              /* VSync taktet, Logik s.o. */
+        if (cr_vs) continue;              /* VSync paces, logic above */
         next += 20;                       /* 50 Hz */
         if (SDL_GetTicks() < next) SDL_Delay(next - SDL_GetTicks());
         else next = SDL_GetTicks();

@@ -1,5 +1,5 @@
-/* moddata.h - ProTracker-Modul fuer die Credits ("CHIPTUNE", 4mat).
- * Rohdaten, automatisch erzeugt. */
+/* moddata.h - ProTracker module for the credits ("CHIPTUNE", 4mat).
+ * Raw data, auto-generated. */
 #ifndef MODDATA_H
 #define MODDATA_H
 

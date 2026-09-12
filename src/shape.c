@@ -5,8 +5,8 @@
 
 unsigned char shape_tab[SHAPE_TAB_SIZE];
 
-/* entspricht $9A49: Tabelle loeschen, Master-Shapes einsetzen,
- * danach kaskadierend die drei verschobenen Kopien erzeugen. */
+/* corresponds to $9A49: clear table, insert master shapes,
+ * then cascade to create the three shifted copies. */
 void shape_init(void)
 {
     int i, page, y;
@@ -15,7 +15,7 @@ void shape_init(void)
     memcpy(shape_tab + 0x004, gd_shapes1, sizeof(gd_shapes1));
     memcpy(shape_tab + 0x07A, gd_shapes2, sizeof(gd_shapes2));
     for (i = 0; i < 8; ++i)
-        shape_tab[0x0F0 + i] = 0x60;          /* Laserstrahl */
+        shape_tab[0x0F0 + i] = 0x60;          /* Laser beam */
 
     for (page = 0; page < 5; ++page) {
         for (y = 0; y < 256; ++y) {
@@ -31,12 +31,12 @@ void shape_init(void)
     }
 }
 
-/* entspricht $9967: zeichnet h Zeilen nach oben, ab Zeile y-1 */
+/* corresponds to $9967: draws h lines upward, from line y-1 */
 void shape_blit(int index, int x, int y, int h, int rowoff, int erase)
 {
     int variant = x & 3;
     int src     = variant * SHAPE_SHIFT + index * 8;
-    int col     = (x & ~3) >> 2;            /* Bitmap-Spalte in Bytes  */
+    int col     = (x & ~3) >> 2;            /* bitmap column in bytes  */
     int base    = y + rowoff * 8;
     int k;
 
