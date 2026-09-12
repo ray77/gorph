@@ -1,0 +1,5 @@
+# Build-Artefakte
+src/*.o
+/gorph
+/wiperec
+.DS_Store
